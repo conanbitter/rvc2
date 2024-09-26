@@ -120,9 +120,9 @@ fn main() -> Result<()> {
         let luma_block_index = (x % 8 + (y % 8) * 8) as usize;
         let color_plane_index = (x / 16 + y / 16 * color_block_width) as usize;
         let color_block_index = ((x % 16) / 2 + (y % 16) / 2 * 8) as usize;
-        let y = y_plane[luma_plane_index][luma_block_index];
-        let u = u_plane[color_plane_index][color_block_index];
-        let v = v_plane[color_plane_index][color_block_index];
+        let y = y_plane[luma_plane_index][luma_block_index].round();
+        let u = u_plane[color_plane_index][color_block_index].round();
+        let v = v_plane[color_plane_index][color_block_index].round();
         *pixel = Rgb([get_r(y, v), get_g(y, u, v), get_b(y, u)]);
     }
     result_full.save("data/result.png")?;
