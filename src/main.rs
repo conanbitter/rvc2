@@ -1,7 +1,12 @@
-use std::{f64::consts::PI, path::Path};
+use std::{
+    cmp::{max, min},
+    f64::consts::PI,
+    path::Path,
+};
 
 use anyhow::Result;
 use image::{ImageBuffer, ImageReader, Luma, Rgb};
+use imageproc::drawing::BresenhamLineIter;
 use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
@@ -115,26 +120,43 @@ fn main() -> Result<()> {
     load_planes("data/vid/test10/001.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
     load_planes("data/vid/test10/002.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
 
-    let mut block_diff = Array2::<f64>::zeros((y_plane_width / 8, y_plane_height / 8).f());
+    let mut block_diff = Array2::<(i32, i32)>::from_elem((y_plane_width / 8, y_plane_height / 8).f(), (0, 0));
     for ((x, y), d) in block_diff.indexed_iter_mut() {
-        *d = compare_blocks(&y_plane, x * 8, y * 8, &y_plane2, x * 8, y * 8);
+        let dst_x = x * 8;
+        let dst_y = y * 8;
+        let mut vect = (0i32, 0i32);
+        let mut min_d = compare_blocks(&y_plane2, dst_x, dst_y, &y_plane, dst_x, dst_y);
+
+        if min_d > 100.0 {
+            for by in max(dst_y as i32 - 8, 0)..=min(dst_y as i32 + 8, y_plane_height as i32 - 1 - 8) {
+                for bx in max(dst_x as i32 - 8, 0)..=min(dst_x as i32 + 8, y_plane_width as i32 - 1 - 8) {
+                    let new_d = compare_blocks(&y_plane2, dst_x, dst_y, &y_plane, bx as usize, by as usize);
+                    if new_d < min_d {
+                        min_d = new_d;
+                        vect = (bx - dst_x as i32, by - dst_y as i32);
+                    }
+                }
+            }
+        }
+        println!("x: {} y:{}", x, y);
+        *d = vect;
     }
 
-    let max_val = *block_diff.max()?;
+    //println!("max diff: {:?}", block_diff);
 
-    println!("max diff: {}", max_val);
-
-    let mut result_diff = ImageBuffer::new(y_plane_width as u32, y_plane_height as u32);
+    /*let mut result_diff = ImageBuffer::new(y_plane_width as u32, y_plane_height as u32);
     for py in 0..y_plane_height {
         for px in 0..y_plane_width {
-            let y = block_diff[(px / 8, py / 8)];
-            let c = (y / max_val * 255.0).min(255.0) as u8;
+            let (vx, vy) = block_diff[(px / 8, py / 8)];
+            let r = ((vx + 8) * 15) as u8;
+            let g = ((vy + 8) * 15) as u8;
+            let c = Rgb([r, g, 0]);
 
-            result_diff.put_pixel(px as u32, py as u32, Luma([c]));
+            result_diff.put_pixel(px as u32, py as u32, c);
         }
     }
 
-    result_diff.save("data/result_diff.png")?;
+    result_diff.save("data/result_diff.png")?;*/
 
     let mut result_y = ImageBuffer::new(y_plane_width as u32, y_plane_height as u32);
     let mut result_u = ImageBuffer::new(uv_plane_width as u32, uv_plane_height as u32);
@@ -143,9 +165,9 @@ fn main() -> Result<()> {
 
     for py in 0..y_plane_height {
         for px in 0..y_plane_width {
-            let y = y_plane[(px, py)];
-            let u = u_plane[(px / 2, py / 2)];
-            let v = v_plane[(px / 2, py / 2)];
+            let y = y_plane2[(px, py)];
+            let u = u_plane2[(px / 2, py / 2)];
+            let v = v_plane2[(px / 2, py / 2)];
             let (r, g, b) = yuv2rgb(y, u, v);
 
             result_y.put_pixel(px as u32, py as u32, Luma([y as u8]));
@@ -153,6 +175,22 @@ fn main() -> Result<()> {
             result_v.put_pixel(px as u32 / 2, py as u32 / 2, Luma([v as u8]));
             if px < image_width && py < image_height {
                 result_full.put_pixel(px as u32, py as u32, Rgb([r, g, b]));
+            }
+        }
+    }
+
+    for py in 0..y_plane_height / 8 {
+        for px in 0..y_plane_width / 8 {
+            let (vx, vy) = block_diff[(px, py)];
+            if vx == 0 && vy == 0 {
+                continue;
+            }
+            let start = ((px * 8 + 4) as f32, (py * 8 + 4) as f32);
+            let end = ((px as i32 * 8 + 4 + vx) as f32, (py as i32 * 8 + 4 + vy) as f32);
+
+            let liner = BresenhamLineIter::new(start, end);
+            for (lx, ly) in liner {
+                result_full.put_pixel(lx as u32, ly as u32, Rgb([255, 0, 0]));
             }
         }
     }
