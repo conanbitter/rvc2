@@ -1,3 +1,4 @@
+use core::f64;
 use std::{
     cmp::{max, min},
     f64::consts::PI,
@@ -91,6 +92,16 @@ fn compare_blocks(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: us
     return block1.iter().zip(block2.iter()).map(|(a, b)| (a - b).abs()).sum();
 }
 
+fn compare_blocks_max(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, by: usize) -> f64 {
+    let block1 = a.slice(s![ax..ax + 8, ay..ay + 8]);
+    let block2 = b.slice(s![bx..bx + 8, by..by + 8]);
+    return block1
+        .iter()
+        .zip(block2.iter())
+        .map(|(a, b)| (a - b).abs())
+        .fold(f64::NEG_INFINITY, f64::max);
+}
+
 fn main() -> Result<()> {
     let img = ImageReader::open("data/vid/test10/001.tif")?.decode()?.to_rgb8();
 
@@ -125,21 +136,25 @@ fn main() -> Result<()> {
         let dst_x = x * 8;
         let dst_y = y * 8;
         let mut vect = (0i32, 0i32);
-        let mut min_d = compare_blocks(&y_plane2, dst_x, dst_y, &y_plane, dst_x, dst_y);
+        let mut min_d = compare_blocks_max(&y_plane2, dst_x, dst_y, &y_plane, dst_x, dst_y);
 
-        if min_d > 100.0 {
+        if min_d > 7.0 {
             for by in max(dst_y as i32 - 8, 0)..=min(dst_y as i32 + 8, y_plane_height as i32 - 1 - 8) {
                 for bx in max(dst_x as i32 - 8, 0)..=min(dst_x as i32 + 8, y_plane_width as i32 - 1 - 8) {
-                    let new_d = compare_blocks(&y_plane2, dst_x, dst_y, &y_plane, bx as usize, by as usize);
+                    let new_d = compare_blocks_max(&y_plane2, dst_x, dst_y, &y_plane, bx as usize, by as usize);
                     if new_d < min_d {
                         min_d = new_d;
                         vect = (bx - dst_x as i32, by - dst_y as i32);
                     }
                 }
             }
+            if min_d > 7.0 {
+                *d = (100, 100);
+            } else {
+                *d = vect
+            };
         }
         println!("x: {} y:{}", x, y);
-        *d = vect;
     }
 
     //println!("max diff: {:?}", block_diff);
@@ -185,12 +200,16 @@ fn main() -> Result<()> {
             if vx == 0 && vy == 0 {
                 continue;
             }
-            let start = ((px * 8 + 4) as f32, (py * 8 + 4) as f32);
-            let end = ((px as i32 * 8 + 4 + vx) as f32, (py as i32 * 8 + 4 + vy) as f32);
+            if vx >= 100 {
+                result_full.put_pixel((px * 8 + 4) as u32, (py * 8 + 4) as u32, Rgb([255, 0, 0]));
+            } else {
+                let start = ((px * 8 + 4) as f32, (py * 8 + 4) as f32);
+                let end = ((px as i32 * 8 + 4 + vx) as f32, (py as i32 * 8 + 4 + vy) as f32);
 
-            let liner = BresenhamLineIter::new(start, end);
-            for (lx, ly) in liner {
-                result_full.put_pixel(lx as u32, ly as u32, Rgb([255, 0, 0]));
+                let liner = BresenhamLineIter::new(start, end);
+                for (lx, ly) in liner {
+                    result_full.put_pixel(lx as u32, ly as u32, Rgb([0, 255, 0]));
+                }
             }
         }
     }
