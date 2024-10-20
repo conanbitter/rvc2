@@ -2,7 +2,7 @@ use std::{f64::consts::PI, path::Path};
 
 use anyhow::Result;
 use image::{ImageBuffer, ImageReader, Luma, Rgb};
-use ndarray::{Array, Array2, ShapeBuilder};
+use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
 
@@ -80,6 +80,12 @@ fn load_planes<P: AsRef<Path>>(
     return Ok(());
 }
 
+fn compare_blocks(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, by: usize) -> f64 {
+    let block1 = a.slice(s![ax..ax + 8, ay..ay + 8]);
+    let block2 = b.slice(s![bx..bx + 8, by..by + 8]);
+    return block1.iter().zip(block2.iter()).map(|(a, b)| (a - b).abs()).sum();
+}
+
 fn main() -> Result<()> {
     let img = ImageReader::open("data/vid/test10/001.tif")?.decode()?.to_rgb8();
 
@@ -109,15 +115,19 @@ fn main() -> Result<()> {
     load_planes("data/vid/test10/001.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
     load_planes("data/vid/test10/002.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
 
-    let diff = (&y_plane - &y_plane2).abs();
-    let max_val = *diff.max()?;
+    let mut block_diff = Array2::<f64>::zeros((y_plane_width / 8, y_plane_height / 8).f());
+    for ((x, y), d) in block_diff.indexed_iter_mut() {
+        *d = compare_blocks(&y_plane, x * 8, y * 8, &y_plane2, x * 8, y * 8);
+    }
+
+    let max_val = *block_diff.max()?;
 
     println!("max diff: {}", max_val);
 
     let mut result_diff = ImageBuffer::new(y_plane_width as u32, y_plane_height as u32);
     for py in 0..y_plane_height {
         for px in 0..y_plane_width {
-            let y = diff[(px, py)];
+            let y = block_diff[(px / 8, py / 8)];
             let c = (y / max_val * 255.0).min(255.0) as u8;
 
             result_diff.put_pixel(px as u32, py as u32, Luma([c]));
