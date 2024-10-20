@@ -1,5 +1,8 @@
+use std::f64::consts::PI;
+
 use anyhow::Result;
 use image::{ImageBuffer, ImageReader, Luma, Rgb};
+use once_cell::sync::Lazy;
 
 type Block = [f64; 8 * 8];
 
@@ -25,6 +28,23 @@ fn get_g(y: f64, u: f64, v: f64) -> u8 {
 
 fn get_b(y: f64, u: f64) -> u8 {
     return (y + 1.772 * (u - 128.0)) as u8;
+}
+
+fn calc_dct(src: &[f64], dst: &mut [f64]) {
+    const K: f64 = PI / 16.0;
+    static A0: Lazy<f64> = Lazy::<f64>::new(|| 1.0 / 2.0f64.sqrt());
+
+    for di in 0..8 {
+        let mut acc = 0.0;
+        for si in 0..8 {
+            acc += src[si] / 2.0 * ((2.0 * si as f64 + 1.0) * K * (di as f64)).cos();
+        }
+        if di == 0 {
+            dst[di] = *A0 / 2.0 * acc;
+        } else {
+            dst[di] = acc / 2.0;
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -90,7 +110,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let mut result_y = ImageBuffer::new(luma_block_width * 8, luma_block_height * 8);
+    /*let mut result_y = ImageBuffer::new(luma_block_width * 8, luma_block_height * 8);
     for (x, y, pixel) in result_y.enumerate_pixels_mut() {
         let plane_index = (x / 8 + y / 8 * luma_block_width) as usize;
         let block_index = (x % 8 + (y % 8) * 8) as usize;
@@ -125,7 +145,8 @@ fn main() -> Result<()> {
         let v = v_plane[color_plane_index][color_block_index].round();
         *pixel = Rgb([get_r(y, v), get_g(y, u, v), get_b(y, u)]);
     }
-    result_full.save("data/result.png")?;
+    result_full.save("data/result.png")?;*/
+    println!("{:?}", y_plane[0]);
 
     Ok(())
 }
