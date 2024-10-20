@@ -103,7 +103,7 @@ fn compare_blocks_max(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx
 }
 
 fn main() -> Result<()> {
-    let img = ImageReader::open("data/vid/test10/001.tif")?.decode()?.to_rgb8();
+    let img = ImageReader::open("data/056.tif")?.decode()?.to_rgb8();
 
     let image_width = img.width() as usize;
     let image_height = img.height() as usize;
@@ -128,8 +128,8 @@ fn main() -> Result<()> {
     let mut u_plane2 = Array2::<f64>::zeros(uv_dims);
     let mut v_plane2 = Array2::<f64>::zeros(uv_dims);
 
-    load_planes("data/vid/test10/001.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
-    load_planes("data/vid/test10/002.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
+    load_planes("data/056.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
+    load_planes("data/059.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
 
     let mut block_diff = Array2::<(i32, i32)>::from_elem((y_plane_width / 8, y_plane_height / 8).f(), (0, 0));
     for ((x, y), d) in block_diff.indexed_iter_mut() {
@@ -201,14 +201,20 @@ fn main() -> Result<()> {
                 continue;
             }
             if vx >= 100 {
-                result_full.put_pixel((px * 8 + 4) as u32, (py * 8 + 4) as u32, Rgb([255, 0, 0]));
+                let lx = (px * 8 + 4) as u32;
+                let ly = (py * 8 + 4) as u32;
+                if lx < image_width as u32 && ly < image_height as u32 {
+                    result_full.put_pixel(lx, ly, Rgb([255, 0, 0]));
+                }
             } else {
                 let start = ((px * 8 + 4) as f32, (py * 8 + 4) as f32);
                 let end = ((px as i32 * 8 + 4 + vx) as f32, (py as i32 * 8 + 4 + vy) as f32);
 
                 let liner = BresenhamLineIter::new(start, end);
                 for (lx, ly) in liner {
-                    result_full.put_pixel(lx as u32, ly as u32, Rgb([0, 255, 0]));
+                    if lx >= 0 && lx < image_width as i32 && ly >= 0 && ly < image_height as i32 {
+                        result_full.put_pixel(lx as u32, ly as u32, Rgb([0, 255, 0]));
+                    };
                 }
             }
         }
