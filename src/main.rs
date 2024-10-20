@@ -46,7 +46,7 @@ fn yuv2rgb(y: f64, u: f64, v: f64) -> (u8, u8, u8) {
     );
 }
 
-fn loadPlanes<P: AsRef<Path>>(filename: P, yp: &mut Vec<f64>, up: &mut Vec<f64>, vp: &mut Vec<f64>) -> Result<()> {
+fn load_planes<P: AsRef<Path>>(filename: P, yp: &mut Vec<f64>, up: &mut Vec<f64>, vp: &mut Vec<f64>) -> Result<()> {
     let img = ImageReader::open(filename)?.decode()?.to_rgb8();
 
     let image_width = img.width();
@@ -104,8 +104,8 @@ fn main() -> Result<()> {
     let mut u_plane2: Vec<f64> = vec![0.0; (uv_plane_width * uv_plane_height) as usize];
     let mut v_plane2: Vec<f64> = vec![0.0; (uv_plane_width * uv_plane_height) as usize];
 
-    loadPlanes("data/vid/test10/001.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
-    loadPlanes("data/vid/test10/002.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
+    load_planes("data/vid/test10/001.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
+    load_planes("data/vid/test10/002.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
 
     y_plane
         .iter_mut()
