@@ -51,39 +51,51 @@ fn main() -> Result<()> {
 
     let image_width = img.width();
     let image_height = img.height();
-    let plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
-    let plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
+    let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
+    let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
+    let uv_plane_width = y_plane_width / 2;
+    let uv_plane_height = y_plane_height / 2;
 
-    println!("{} {} {} {}", image_width, image_height, plane_width, plane_height);
+    println!(
+        "    image: {}x{}\n  Y plane: {}x{}\nUV planes: {}x{}",
+        image_width, image_height, y_plane_width, y_plane_height, uv_plane_width, uv_plane_height
+    );
 
-    let mut y_plane: Vec<f64> = vec![0.0; (plane_width * plane_height) as usize];
-    let mut u_plane: Vec<f64> = vec![0.0; (plane_width * plane_height) as usize];
-    let mut v_plane: Vec<f64> = vec![0.0; (plane_width * plane_height) as usize];
+    let mut y_plane: Vec<f64> = vec![0.0; (y_plane_width * y_plane_height) as usize];
+    let mut u_plane: Vec<f64> = vec![0.0; (uv_plane_width * uv_plane_height) as usize];
+    let mut v_plane: Vec<f64> = vec![0.0; (uv_plane_width * uv_plane_height) as usize];
 
-    for py in 0..plane_height {
-        for px in 0..plane_width {
+    for py in 0..y_plane_height {
+        for px in 0..y_plane_width {
             let ix = px.min(image_width - 1);
             let iy = py.min(image_height - 1);
             let Rgb([r, g, b]) = *img.get_pixel(ix, iy);
 
-            let y_index = (px + py * plane_width) as usize;
-            let uv_index = (px + py * plane_width) as usize; //px / 2 + py / 2 * plane_width;
+            let y_index = (px + py * y_plane_width) as usize;
+            let uv_index = (px / 2 + py / 2 * uv_plane_width) as usize;
             let (y, u, v) = rgb2yuv(r, g, b);
             y_plane[y_index] = y;
-            u_plane[uv_index] = u;
-            v_plane[uv_index] = v;
+            u_plane[uv_index] += u;
+            v_plane[uv_index] += v;
         }
     }
 
-    let mut result_y = ImageBuffer::new(plane_width, plane_height);
-    let mut result_u = ImageBuffer::new(plane_width, plane_height);
-    let mut result_v = ImageBuffer::new(plane_width, plane_height);
+    for p in u_plane.iter_mut() {
+        *p /= 4.0;
+    }
+    for p in v_plane.iter_mut() {
+        *p /= 4.0;
+    }
+
+    let mut result_y = ImageBuffer::new(y_plane_width, y_plane_height);
+    let mut result_u = ImageBuffer::new(uv_plane_width, uv_plane_height);
+    let mut result_v = ImageBuffer::new(uv_plane_width, uv_plane_height);
     let mut result_full = ImageBuffer::new(image_width, image_height);
 
-    for py in 0..plane_height {
-        for px in 0..plane_width {
-            let y_index = (px + py * plane_width) as usize;
-            let uv_index = (px + py * plane_width) as usize;
+    for py in 0..y_plane_height {
+        for px in 0..y_plane_width {
+            let y_index = (px + py * y_plane_width) as usize;
+            let uv_index = (px / 2 + py / 2 * uv_plane_width) as usize;
 
             let y = y_plane[y_index];
             let u = u_plane[uv_index];
@@ -91,8 +103,8 @@ fn main() -> Result<()> {
             let (r, g, b) = yuv2rgb(y, u, v);
 
             result_y.put_pixel(px, py, Luma([y as u8]));
-            result_u.put_pixel(px, py, Luma([u as u8]));
-            result_v.put_pixel(px, py, Luma([v as u8]));
+            result_u.put_pixel(px / 2, py / 2, Luma([u as u8]));
+            result_v.put_pixel(px / 2, py / 2, Luma([v as u8]));
             if px < image_width && py < image_height {
                 result_full.put_pixel(px, py, Rgb([r, g, b]));
             }
