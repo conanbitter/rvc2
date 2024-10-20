@@ -107,11 +107,13 @@ fn main() -> Result<()> {
     loadPlanes("data/vid/test10/001.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
     loadPlanes("data/vid/test10/002.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
 
-    y_plane.iter_mut().zip(y_plane2.iter()).for_each(|(x, y)| *x = *x - y);
-    let min_val = y_plane.iter().fold(f64::INFINITY, |a, &b| a.min(b));
+    y_plane
+        .iter_mut()
+        .zip(y_plane2.iter())
+        .for_each(|(x, y)| *x = (*x - y).abs());
     let max_val = y_plane.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
 
-    println!("{} {}", min_val, max_val);
+    println!("max diff: {}", max_val);
 
     let mut result_diff = ImageBuffer::new(y_plane_width, y_plane_height);
     for py in 0..y_plane_height {
@@ -119,18 +121,9 @@ fn main() -> Result<()> {
             let y_index = (px + py * y_plane_width) as usize;
 
             let y = y_plane[y_index];
-            let r = if y >= 0.0 {
-                (y / max_val * 255.0).min(255.0) as u8
-            } else {
-                0
-            };
-            let g = if y < 0.0 {
-                (y / min_val * 255.0).min(255.0) as u8
-            } else {
-                0
-            };
+            let c = (y / max_val * 255.0).min(255.0) as u8;
 
-            result_diff.put_pixel(px, py, Rgb([r, g, 0]));
+            result_diff.put_pixel(px, py, Luma([c]));
         }
     }
 
