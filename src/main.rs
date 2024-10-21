@@ -86,24 +86,16 @@ fn load_planes<P: AsRef<Path>>(
     return Ok(());
 }
 
-fn compare_blocks(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, by: usize) -> f64 {
+fn block_sad(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, by: usize) -> f64 {
     let block1 = a.slice(s![ax..ax + 8, ay..ay + 8]);
     let block2 = b.slice(s![bx..bx + 8, by..by + 8]);
     return block1.iter().zip(block2.iter()).map(|(a, b)| (a - b).abs()).sum();
 }
 
-fn compare_blocks_max(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, by: usize) -> f64 {
-    let block1 = a.slice(s![ax..ax + 8, ay..ay + 8]);
-    let block2 = b.slice(s![bx..bx + 8, by..by + 8]);
-    return block1
-        .iter()
-        .zip(block2.iter())
-        .map(|(a, b)| (a - b).abs())
-        .fold(f64::NEG_INFINITY, f64::max);
-}
+const ZMP_TRESHOLD: f64 = 512.0;
 
 fn main() -> Result<()> {
-    let img = ImageReader::open("data/056.tif")?.decode()?.to_rgb8();
+    let img = ImageReader::open("data/076.tif")?.decode()?.to_rgb8();
 
     let image_width = img.width() as usize;
     let image_height = img.height() as usize;
@@ -128,32 +120,33 @@ fn main() -> Result<()> {
     let mut u_plane2 = Array2::<f64>::zeros(uv_dims);
     let mut v_plane2 = Array2::<f64>::zeros(uv_dims);
 
-    load_planes("data/056.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
-    load_planes("data/059.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
+    load_planes("data/076.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
+    load_planes("data/079.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
 
     let mut block_diff = Array2::<(i32, i32)>::from_elem((y_plane_width / 8, y_plane_height / 8).f(), (0, 0));
     for ((x, y), d) in block_diff.indexed_iter_mut() {
         let dst_x = x * 8;
         let dst_y = y * 8;
         let mut vect = (0i32, 0i32);
-        let mut min_d = compare_blocks_max(&y_plane2, dst_x, dst_y, &y_plane, dst_x, dst_y);
+        let mut min_d = block_sad(&y_plane2, dst_x, dst_y, &y_plane, dst_x, dst_y);
 
-        if min_d > 7.0 {
+        if min_d > 512.0 {
             for by in max(dst_y as i32 - 8, 0)..=min(dst_y as i32 + 8, y_plane_height as i32 - 1 - 8) {
                 for bx in max(dst_x as i32 - 8, 0)..=min(dst_x as i32 + 8, y_plane_width as i32 - 1 - 8) {
-                    let new_d = compare_blocks_max(&y_plane2, dst_x, dst_y, &y_plane, bx as usize, by as usize);
+                    let new_d = block_sad(&y_plane2, dst_x, dst_y, &y_plane, bx as usize, by as usize);
                     if new_d < min_d {
                         min_d = new_d;
                         vect = (bx - dst_x as i32, by - dst_y as i32);
                     }
                 }
             }
-            if min_d > 7.0 {
+            if min_d > 512.0 {
                 *d = (100, 100);
             } else {
                 *d = vect
             };
         }
+        *d = vect;
         println!("x: {} y:{}", x, y);
     }
 
@@ -223,7 +216,7 @@ fn main() -> Result<()> {
     result_y.save("data/result_y.png")?;
     result_u.save("data/result_u.png")?;
     result_v.save("data/result_v.png")?;
-    result_full.save("data/result.png")?;
+    result_full.save("data/76_1.png")?;
 
     Ok(())
 }
