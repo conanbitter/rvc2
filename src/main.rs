@@ -16,7 +16,7 @@ use once_cell::sync::Lazy;
 use planes::Plane;
 
 type Block = [f64; 8 * 8];
-
+/*
 fn calc_dct(src: &[f64], dst: &mut [f64]) {
     const K: f64 = PI / 16.0;
     static A0: Lazy<f64> = Lazy::<f64>::new(|| 1.0 / 2.0f64.sqrt());
@@ -32,29 +32,6 @@ fn calc_dct(src: &[f64], dst: &mut [f64]) {
             dst[di] = acc / 2.0;
         }
     }
-}
-
-fn rgb2yuv(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
-    let r = r as f64;
-    let g = g as f64;
-    let b = b as f64;
-
-    let y = 0.299 * r + 0.587 * g + 0.114 * b;
-    let u = 0.5 * (b - y) / (1.0 - 0.114) + 128.0;
-    let v = 0.5 * (r - y) / (1.0 - 0.299) + 128.0;
-
-    return (y, u, v);
-}
-
-fn yuv2rgb(y: f64, u: f64, v: f64) -> (u8, u8, u8) {
-    let r = y + 1.402 * (v - 128.0);
-    let g = y - (0.114 * 1.772 * (u - 128.0) + 0.299 * 1.402 * (v - 128.0)) / 0.587;
-    let b = y + 1.772 * (u - 128.0);
-    return (
-        r.clamp(0.0, 255.0) as u8,
-        g.clamp(0.0, 255.0) as u8,
-        b.clamp(0.0, 255.0) as u8,
-    );
 }
 
 fn load_planes<P: AsRef<Path>>(
@@ -96,54 +73,7 @@ fn block_sad(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, 
 }
 
 const ZMP_TRESHOLD: f64 = 128.0; //512.0;
-
-fn image2planes<P: AsRef<Path>>(filename: P, yp: &mut Plane, up: &mut Plane, vp: &mut Plane) -> Result<()> {
-    let img = ImageReader::open(filename)?.decode()?.to_rgb8();
-
-    let image_width = img.width();
-    let image_height = img.height();
-    let plane_width = yp.width();
-    let plane_height = yp.height();
-
-    yp.fill(0.0);
-    up.fill(0.0);
-    vp.fill(0.0);
-
-    for py in 0..plane_height {
-        for px in 0..plane_width {
-            let ix = px.min(image_width - 1) as u32;
-            let iy = py.min(image_height - 1) as u32;
-            let Rgb([r, g, b]) = *img.get_pixel(ix, iy);
-
-            let (y, u, v) = rgb2yuv(r, g, b);
-            yp.put(px, py, y);
-            up.add(px / 2, py / 2, u);
-            vp.add(px / 2, py / 2, v);
-        }
-    }
-
-    up.scale(1.0 / 4.0);
-    vp.scale(1.0 / 4.0);
-
-    return Ok(());
-}
-
-fn plane2luma(plane: &Plane, image: &mut GrayImage) {
-    for (input, output) in plane.data.iter().zip(image.pixels_mut()) {
-        *output = Luma([*input as u8]);
-    }
-}
-
-fn planes2image(yp: &Plane, up: &Plane, vp: &Plane, image: &mut RgbImage) {
-    for (px, py, pixel) in image.enumerate_pixels_mut() {
-        let y = yp.get(px, py);
-        let u = up.get(px / 2, py / 2);
-        let v = vp.get(px / 2, py / 2);
-        let (r, g, b) = yuv2rgb(y, u, v);
-        *pixel = Rgb([r, g, b]);
-    }
-}
-
+*/
 fn main() -> Result<()> {
     let (image_width, image_height) = ImageReader::open("data/056.tif")?.into_dimensions()?;
     let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
@@ -159,18 +89,18 @@ fn main() -> Result<()> {
     let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
     let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
 
-    image2planes("data/056.tif", &mut plane_ay, &mut plane_au, &mut plane_av)?;
-    image2planes("data/059.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
+    Plane::image2planes("data/056.tif", &mut plane_ay, &mut plane_au, &mut plane_av)?;
+    Plane::image2planes("data/059.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
 
     let mut result_y = ImageBuffer::new(y_plane_width, y_plane_height);
     let mut result_u = ImageBuffer::new(uv_plane_width, uv_plane_height);
     let mut result_v = ImageBuffer::new(uv_plane_width, uv_plane_height);
     let mut result_full = ImageBuffer::new(image_width, image_height);
 
-    plane2luma(&plane_by, &mut result_y);
-    plane2luma(&plane_bu, &mut result_u);
-    plane2luma(&plane_bv, &mut result_v);
-    planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
+    Plane::plane2luma(&plane_by, &mut result_y);
+    Plane::plane2luma(&plane_bu, &mut result_u);
+    Plane::plane2luma(&plane_bv, &mut result_v);
+    Plane::planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
 
     result_y.save("data/result_y.png")?;
     result_u.save("data/result_u.png")?;
