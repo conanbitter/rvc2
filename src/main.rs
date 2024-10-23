@@ -76,7 +76,7 @@ fn block_sad(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, 
 const ZMP_TRESHOLD: f64 = 128.0; //512.0;
 */
 fn main() -> Result<()> {
-    let test_block = Block([
+    let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
         -61.0, -67.0, -60.0, -24.0, -2.0, -40.0, -60.0, -58.0, -49.0, -63.0, -68.0, -58.0, -51.0, -60.0, -70.0, -53.0,
@@ -86,8 +86,10 @@ fn main() -> Result<()> {
     let mut calced = Block::new();
     test_block.dct(&mut calced);
     calced.quantization();
+    calced.unwrap(&mut test_block);
+    test_block.encode();
 
-    println!("{:?}", calced);
+    //println!("{:?}", test_block);
     return Ok(());
 
     let (image_width, image_height) = ImageReader::open("data/056.tif")?.into_dimensions()?;
