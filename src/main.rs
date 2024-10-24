@@ -5,10 +5,12 @@ use std::{
     path::Path,
 };
 
+mod bitio;
 mod blocks;
 mod planes;
 
 use anyhow::Result;
+use bitio::BitWriter;
 use blocks::Block;
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
@@ -76,6 +78,18 @@ fn block_sad(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, 
 const ZMP_TRESHOLD: f64 = 128.0; //512.0;
 */
 fn main() -> Result<()> {
+    let mut output = Vec::<u8>::new();
+    let mut writer = BitWriter::new(&mut output);
+    writer.write_bit(1)?;
+    writer.write_bit(0)?;
+    writer.write_bit(1)?;
+    writer.flush()?;
+
+    for i in output {
+        print!("{:08b} ", i);
+    }
+    return Ok(());
+
     let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
