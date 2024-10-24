@@ -48,7 +48,7 @@ impl<'a> BitWriter<'a> {
         return Ok(());
     }
 
-    pub fn adjust_int(value: i16, offset: i16) -> i16 {
+    fn adjust_int(value: i16, offset: i16) -> i16 {
         if value >= 0 {
             return value - offset;
         } else {
@@ -56,7 +56,7 @@ impl<'a> BitWriter<'a> {
         }
     }
 
-    pub fn varint_convert(value: i16) -> (usize, i16) {
+    fn varint_convert(value: i16) -> (usize, i16) {
         if value <= -1024 || value >= 1024 {
             return (11, BitWriter::adjust_int(value, 1024));
         }
@@ -91,5 +91,15 @@ impl<'a> BitWriter<'a> {
             return (1, BitWriter::adjust_int(value, 1));
         }
         return (0, 0);
+    }
+
+    pub fn write_vec(&mut self, values: &[i16]) -> Result<()> {
+        for d in values {
+            if *d < 0 {
+                return Ok(());
+            }
+            self.write_bit(*d as u8)?;
+        }
+        return Ok(());
     }
 }
