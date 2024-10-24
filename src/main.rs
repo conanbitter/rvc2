@@ -83,11 +83,14 @@ fn main() -> Result<()> {
     writer.write_bit(1)?;
     writer.write_bit(0)?;
     writer.write_bit(1)?;
+
+    writer.write_varint(-26)?;
     writer.flush()?;
 
     for i in output {
         print!("{:08b} ", i);
     }
+    print!("{}", 0b1111111111111001u16 as i16);
     return Ok(());
 
     let mut test_block = Block([
