@@ -1,6 +1,9 @@
 use std::{f64::consts::PI, fmt};
 
+use anyhow::Result;
 use once_cell::sync::Lazy;
+
+use crate::bitio::BitWriter;
 
 pub struct Block(pub [f64; 8 * 8]);
 
@@ -549,10 +552,10 @@ impl Block {
         return 0;
     }
 
-    pub fn encode(&self) {
-        println!("{:?}", self.0);
+    pub fn encode(&self, writer: &mut BitWriter) -> Result<()> {
         let dc = self.0[0] as i16;
-        print!("({}) {}; ", Block::int_width(dc), dc);
+        writer.write_vec(&HUFFMAN_ENCODE[Block::int_width(dc) as usize])?;
+        writer.write_varint(dc)?;
         let mut zeroes = 0;
         let mut tail = 0;
         for i in 0..8 * 8 {
@@ -566,18 +569,20 @@ impl Block {
             if item == 0 {
                 zeroes += 1;
                 if zeroes == 16 {
-                    print!("(15, 0); ");
+                    writer.write_vec(&HUFFMAN_ENCODE[0xF0])?;
                     zeroes = 0;
                 }
             } else {
-                let binary = format!("{:16b}", if item < 0 { item - 1 } else { item });
                 let item_width = Block::int_width(item);
-                print!("([{}, {}], {}); ", zeroes, item_width, &binary[16 - item_width..]);
+                let head = (zeroes as u8) << 4 | item_width as u8;
+                writer.write_vec(&HUFFMAN_ENCODE[head as usize])?;
+                writer.write_varint(item)?;
                 zeroes = 0;
             }
         }
         if tail > 0 {
-            print!("(0, 0); ");
+            writer.write_vec(&HUFFMAN_ENCODE[0x00])?;
         }
+        return Ok(());
     }
 }

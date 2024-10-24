@@ -80,18 +80,6 @@ const ZMP_TRESHOLD: f64 = 128.0; //512.0;
 fn main() -> Result<()> {
     let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
-    writer.write_bit(1)?;
-    writer.write_bit(0)?;
-    writer.write_bit(1)?;
-
-    writer.write_varint(-26)?;
-    writer.flush()?;
-
-    for i in output {
-        print!("{:08b} ", i);
-    }
-    print!("{}", 0b1111111111111001u16 as i16);
-    return Ok(());
 
     let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
@@ -104,9 +92,13 @@ fn main() -> Result<()> {
     test_block.dct(&mut calced);
     calced.quantization();
     calced.unwrap(&mut test_block);
-    test_block.encode();
+    test_block.encode(&mut writer)?;
 
     //println!("{:?}", test_block);
+    writer.flush()?;
+    for i in output {
+        print!("{:08b} ", i);
+    }
     return Ok(());
 
     let (image_width, image_height) = ImageReader::open("data/056.tif")?.into_dimensions()?;

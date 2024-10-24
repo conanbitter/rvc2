@@ -30,7 +30,6 @@ impl<'a> BitWriter<'a> {
 
     pub fn write_varint(&mut self, value: i16) -> Result<()> {
         let (width, data) = BitWriter::varint_convert(value);
-        println!("width:{}", width);
         if width > 0 {
             for i in 0..width {
                 self.write_bit(((data >> i) & 1) as u8)?;
@@ -93,7 +92,7 @@ impl<'a> BitWriter<'a> {
         return (0, 0);
     }
 
-    pub fn write_vec(&mut self, values: &[i16]) -> Result<()> {
+    pub fn write_vec(&mut self, values: &[i8]) -> Result<()> {
         for d in values {
             if *d < 0 {
                 return Ok(());
