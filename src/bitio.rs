@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{Read, Write};
 
 use anyhow::Result;
 
@@ -6,6 +6,12 @@ pub struct BitWriter<'a> {
     data: [u8; 1],
     bit_pos: u8,
     writer: &'a mut dyn Write,
+}
+
+pub struct BitReader<'a> {
+    data: [u8; 1],
+    bit_pos: u8,
+    reader: &'a mut dyn Read,
 }
 
 impl<'a> BitWriter<'a> {
@@ -30,9 +36,12 @@ impl<'a> BitWriter<'a> {
 
     pub fn write_varint(&mut self, value: i16) -> Result<()> {
         let (width, data) = BitWriter::varint_convert(value);
+        /*if width == 5 {
+            println!("{} {:016b}", value, data);
+        }*/
         if width > 0 {
             for i in 0..width {
-                self.write_bit(((data >> i) & 1) as u8)?;
+                self.write_bit(((data >> (width - 1 - i)) & 1) as u8)?;
             }
         }
         return Ok(());
@@ -100,5 +109,78 @@ impl<'a> BitWriter<'a> {
             self.write_bit(*d as u8)?;
         }
         return Ok(());
+    }
+}
+
+const WIDTH_OFFSETS: [i16; 12] = [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024];
+
+impl<'a> BitReader<'a> {
+    pub fn new(reader: &'a mut dyn Read) -> BitReader {
+        BitReader {
+            data: [0],
+            bit_pos: 0,
+            reader,
+        }
+    }
+
+    pub fn read_bit(&mut self) -> Result<u8> {
+        if self.bit_pos == 0 {
+            self.reader.read_exact(&mut self.data)?;
+        }
+        let result = (self.data[0] >> self.bit_pos) & 1;
+        self.bit_pos += 1;
+        if self.bit_pos >= 8 {
+            self.bit_pos = 0;
+        }
+        return Ok(result);
+    }
+
+    pub fn decode_huffman(&mut self, decoder: &[[i16; 2]]) -> Result<u8> {
+        let mut dec_pos = 0i16;
+        loop {
+            let bit = self.read_bit()?;
+            let next = decoder[dec_pos as usize][bit as usize];
+            if next <= 0 {
+                return Ok((-next) as u8);
+            } else {
+                dec_pos += next;
+            }
+        }
+    }
+
+    pub fn read_varint(&mut self, width: u8) -> Result<i16> {
+        if width == 0 {
+            return Ok(0);
+        }
+
+        let mut result = 0i16;
+
+        let sign = self.read_bit()?;
+        if sign > 0 {
+            result = !result;
+        }
+        //println!("{}", sign);
+
+        for i in 0..width - 1 {
+            let bit = self.read_bit()?;
+            //println!("{}", bit);
+            if bit > 0 {
+                result |= 1 << (width - 2 - i);
+            } else {
+                result &= !(1 << (width - 2 - i));
+            }
+        }
+
+        //println!("{:016b}", result);
+
+        if sign > 0 {
+            result = -!result - WIDTH_OFFSETS[width as usize];
+        } else {
+            result = result + WIDTH_OFFSETS[width as usize];
+        }
+
+        //println!("{:016b}", result);
+
+        return Ok(result);
     }
 }
