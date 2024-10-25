@@ -3,7 +3,7 @@ use std::{f64::consts::PI, fmt};
 use anyhow::Result;
 use once_cell::sync::Lazy;
 
-use crate::bitio::BitWriter;
+use crate::bitio::{BitReader, BitWriter};
 
 pub struct Block(pub [f64; 8 * 8]);
 
@@ -583,6 +583,37 @@ impl Block {
         if tail > 0 {
             writer.write_vec(&HUFFMAN_ENCODE[0x00])?;
         }
+        return Ok(());
+    }
+
+    pub fn decode(&mut self, reader: &mut BitReader) -> Result<()> {
+        for d in self.0.iter_mut() {
+            *d = 0.0;
+        }
+
+        let dc_width = reader.decode_huffman(&HUFFMAN_DECODE)?;
+        let dc = reader.read_varint(dc_width)?;
+        //println!("{} {}", dc_width, dc);
+
+        self.0[0] = dc as f64;
+
+        let mut i = 1;
+
+        while i < 64 {
+            let head = reader.decode_huffman(&HUFFMAN_DECODE)?;
+            if head == 0xF0 {
+                i += 16;
+            } else if head == 0x00 {
+                break;
+            } else {
+                let item_width = head & 0b1111;
+                let zeroes = head >> 4;
+                i += zeroes;
+                self.0[i as usize] = reader.read_varint(item_width)? as f64;
+                i += 1;
+            }
+        }
+
         return Ok(());
     }
 }

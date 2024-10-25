@@ -10,7 +10,7 @@ mod blocks;
 mod planes;
 
 use anyhow::Result;
-use bitio::BitWriter;
+use bitio::{BitReader, BitWriter};
 use blocks::Block;
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
@@ -92,13 +92,22 @@ fn main() -> Result<()> {
     test_block.dct(&mut calced);
     calced.quantization();
     calced.unwrap(&mut test_block);
-    test_block.encode(&mut writer)?;
 
-    //println!("{:?}", test_block);
+    println!("{:?}", test_block);
+    test_block.encode(&mut writer)?;
     writer.flush()?;
-    for i in output {
+    for i in &output {
         print!("{:08b} ", i);
     }
+    println!("");
+
+    let mut outslice = &output[..];
+    let mut reader = BitReader::new(&mut outslice);
+
+    let mut test_block2 = Block::new();
+    test_block2.decode(&mut reader)?;
+    println!("{:?}", test_block2);
+
     return Ok(());
 
     let (image_width, image_height) = ImageReader::open("data/056.tif")?.into_dimensions()?;
