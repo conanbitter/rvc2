@@ -90,10 +90,10 @@ fn main() -> Result<()> {
 
     let mut calced = Block::new();
     test_block.dct(&mut calced);
+    println!("{:?}", calced);
     calced.quantization();
     calced.unwrap(&mut test_block);
 
-    println!("{:?}", test_block);
     test_block.encode(&mut writer)?;
     writer.flush()?;
     for i in &output {
@@ -106,7 +106,9 @@ fn main() -> Result<()> {
 
     let mut test_block2 = Block::new();
     test_block2.decode(&mut reader)?;
-    println!("{:?}", test_block2);
+    test_block2.wrap(&mut test_block);
+    test_block.dequantization();
+    println!("{:?}", test_block);
 
     return Ok(());
 

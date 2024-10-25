@@ -29,6 +29,17 @@ const UNWRAP_PATTERN: [usize; 8 * 8] = [
     53, 60, 61, 54, 47, 55, 62, 63,
 ];
 
+const WRAP_PATTERN: [usize; 8 * 8] = [
+    0, 1, 5, 6, 14, 15, 27, 28, //
+    2, 4, 7, 13, 16, 26, 29, 42, //
+    3, 8, 12, 17, 25, 30, 41, 43, //
+    9, 11, 18, 24, 31, 40, 44, 53, //
+    10, 19, 23, 32, 39, 45, 52, 54, //
+    20, 22, 33, 38, 46, 51, 55, 60, //
+    21, 34, 37, 47, 50, 56, 59, 61, //
+    35, 36, 48, 49, 57, 58, 62, 63,
+];
+
 const HUFFMAN_ENCODE: [[i8; 16]; 256] = [
     [1, 0, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
     [0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
@@ -509,9 +520,26 @@ impl Block {
         }
     }
 
+    pub fn dequantization(&mut self) {
+        for (d, q) in self.0.iter_mut().zip(QMATRIX_LUMA) {
+            *d = *d * q;
+        }
+    }
+
     pub fn unwrap(&self, dst: &mut Block) {
         for (i, d) in dst.0.iter_mut().enumerate() {
             *d = self.0[UNWRAP_PATTERN[i]];
+        }
+    }
+
+    pub fn wrap(&self, dst: &mut Block) {
+        /*let mut wrap_pattern = [0usize; 8 * 8];
+        for i in 0..64 {
+            wrap_pattern[UNWRAP_PATTERN[i]] = i;
+        }
+        println!("{:?}", wrap_pattern);*/
+        for (i, d) in dst.0.iter_mut().enumerate() {
+            *d = self.0[WRAP_PATTERN[i]];
         }
     }
 
