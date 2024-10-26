@@ -89,8 +89,8 @@ fn main() -> Result<()> {
     ]);
 
     let mut calced = Block::new();
-    test_block.dct(&mut calced);
-    println!("{:?}", calced);
+
+    test_block.apply_dct(&mut calced);
     calced.quantization();
     calced.unwrap(&mut test_block);
 
@@ -108,7 +108,8 @@ fn main() -> Result<()> {
     test_block2.decode(&mut reader)?;
     test_block2.wrap(&mut test_block);
     test_block.dequantization();
-    println!("{:?}", test_block);
+    test_block.revert_dct(&mut test_block2);
+    println!("{:?}", test_block2);
 
     return Ok(());
 
