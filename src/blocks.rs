@@ -5,6 +5,7 @@ use once_cell::sync::Lazy;
 
 use crate::bitio::{BitReader, BitWriter};
 
+#[derive(Clone)]
 pub struct Block(pub [f64; 8 * 8]);
 
 const QMATRIX_LUMA: [f64; 8 * 8] = [
@@ -790,6 +791,12 @@ impl Block {
     pub fn substract(&mut self, other: &Block) {
         for (d, oth) in self.0.iter_mut().zip(other.0) {
             *d = *d - oth;
+        }
+    }
+
+    pub fn add(&mut self, other: &Block) {
+        for (d, oth) in self.0.iter_mut().zip(other.0) {
+            *d = *d + oth;
         }
     }
 }
