@@ -80,6 +80,8 @@ const ZMP_TRESHOLD: f64 = 128.0; //512.0;
 fn main() -> Result<()> {
     let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
+    let mut output2 = Vec::<u8>::new();
+    let mut writer2 = BitWriter::new(&mut output2);
 
     let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
@@ -88,15 +90,23 @@ fn main() -> Result<()> {
         -43.0, -57.0, -64.0, -69.0, -73.0, -67.0, -63.0, -45.0, -41.0, -49.0, -59.0, -60.0, -63.0, -52.0, -50.0, -34.0,
     ]);
 
+    test_block.encode2(&mut writer2)?;
+    writer2.flush()?;
+
     let mut calced = Block::new();
 
     test_block.apply_dct(&mut calced);
     calced.quantization();
     calced.unwrap(&mut test_block);
+    println!("{:?}", test_block);
 
     test_block.encode(&mut writer)?;
     writer.flush()?;
     for i in &output {
+        print!("{:08b} ", i);
+    }
+    println!("");
+    for i in &output2 {
         print!("{:08b} ", i);
     }
     println!("");

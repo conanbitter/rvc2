@@ -645,6 +645,70 @@ impl Block {
         return Ok(());
     }
 
+    fn process_pixel(&self, index: usize) -> i16 {
+        let unwrapped_index = UNWRAP_PATTERN[index];
+        // DCT
+        let pixel: f64 = self
+            .0
+            .iter()
+            .enumerate()
+            .map(|(xy, g)| g * DCT_K[unwrapped_index][xy])
+            .sum();
+        // Quantization
+        let pixel = (pixel / QMATRIX_LUMA[unwrapped_index]).round();
+        return pixel as i16;
+    }
+
+    pub fn encode2(&self, writer: &mut BitWriter) -> Result<()> {
+        let mut temp = [0i16; 8 * 8];
+        // Convert block
+        for (i, d) in temp.iter_mut().enumerate() {
+            let unwrapped_index = UNWRAP_PATTERN[i];
+            // DCT
+            let pixel: f64 = self
+                .0
+                .iter()
+                .enumerate()
+                .map(|(xy, g)| g * DCT_K[unwrapped_index][xy])
+                .sum();
+            // Quantization
+            let pixel = (pixel / QMATRIX_LUMA[unwrapped_index]).round();
+            *d = pixel as i16;
+        }
+
+        let dc = temp[0];
+        writer.write_vec(&HUFFMAN_ENCODE[Block::int_width(dc) as usize])?;
+        writer.write_varint(dc)?;
+        let mut zeroes = 0;
+        let mut tail = 0;
+        for i in 0..8 * 8 {
+            if temp[63 - i] != 0 {
+                break;
+            }
+            tail += 1;
+        }
+        for i in 1..64 - tail {
+            let item = temp[i];
+            if item == 0 {
+                zeroes += 1;
+                if zeroes == 16 {
+                    writer.write_vec(&HUFFMAN_ENCODE[0xF0])?;
+                    zeroes = 0;
+                }
+            } else {
+                let item_width = Block::int_width(item);
+                let head = (zeroes as u8) << 4 | item_width as u8;
+                writer.write_vec(&HUFFMAN_ENCODE[head as usize])?;
+                writer.write_varint(item)?;
+                zeroes = 0;
+            }
+        }
+        if tail > 0 {
+            writer.write_vec(&HUFFMAN_ENCODE[0x00])?;
+        }
+        return Ok(());
+    }
+
     pub fn decode(&mut self, reader: &mut BitReader) -> Result<()> {
         for d in self.0.iter_mut() {
             *d = 0.0;
