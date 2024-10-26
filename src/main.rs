@@ -118,8 +118,16 @@ fn main() -> Result<()> {
     test_block2.decode(&mut reader)?;
     test_block2.wrap(&mut test_block);
     test_block.dequantization();
+    //test_block.unwrap(&mut test_block2);
     test_block.revert_dct(&mut test_block2);
     println!("{:?}", test_block2);
+
+    let mut outslice2 = &output2[..];
+    let mut reader2 = BitReader::new(&mut outslice2);
+    let mut test_block3 = Block::new();
+    test_block3.decode2(&mut reader2)?;
+    test_block3.substract(&test_block2);
+    println!("{:?}", test_block3);
 
     return Ok(());
 

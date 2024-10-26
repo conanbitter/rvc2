@@ -739,4 +739,57 @@ impl Block {
 
         return Ok(());
     }
+
+    pub fn decode2(&mut self, reader: &mut BitReader) -> Result<()> {
+        let mut temp = [0f64; 8 * 8];
+
+        let dc_width = reader.decode_huffman(&HUFFMAN_DECODE)?;
+        let dc = reader.read_varint(dc_width)?;
+
+        temp[0] = dc as f64;
+
+        let mut i = 1usize;
+
+        while i < 64 {
+            let head = reader.decode_huffman(&HUFFMAN_DECODE)?;
+            if head == 0xF0 {
+                i += 16;
+            } else if head == 0x00 {
+                break;
+            } else {
+                let item_width = head & 0b1111;
+                let zeroes = head >> 4;
+                i += zeroes as usize;
+                temp[i] = reader.read_varint(item_width)? as f64;
+                i += 1;
+            }
+        }
+
+        // Revert
+        // Dequantization
+        for (i, d) in temp.iter_mut().enumerate() {
+            *d *= QMATRIX_LUMA[UNWRAP_PATTERN[i]];
+        }
+        /*for (i, d) in self.0.iter_mut().enumerate() {
+            *d = temp[WRAP_PATTERN[i]];
+        }
+        println!("{:?}", self);*/
+        for (i, d) in self.0.iter_mut().enumerate() {
+            //let wrapped_index = ;
+            // Revert DCT
+            *d = temp
+                .iter()
+                .enumerate()
+                .map(|(uv, g)| g * UNDCT_K[i][UNWRAP_PATTERN[uv]])
+                .sum();
+        }
+
+        return Ok(());
+    }
+
+    pub fn substract(&mut self, other: &Block) {
+        for (d, oth) in self.0.iter_mut().zip(other.0) {
+            *d = *d - oth;
+        }
+    }
 }
