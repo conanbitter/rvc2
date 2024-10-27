@@ -1160,14 +1160,12 @@ impl Block {
         let huffman_dc = if is_luma {
             &HUFFMAN_ENCODE_DC_LUMA
         } else {
-            //&HUFFMAN_ENCODE_DC_CHROMA
-            &HUFFMAN_ENCODE_DC_LUMA
+            &HUFFMAN_ENCODE_DC_CHROMA
         };
         let huffman_ac = if is_luma {
             &HUFFMAN_ENCODE_AC_LUMA
         } else {
-            //&HUFFMAN_ENCODE_AC_CHROMA
-            &HUFFMAN_ENCODE_AC_LUMA
+            &HUFFMAN_ENCODE_AC_CHROMA
         };
         let qmatrix = if is_luma { &QMATRIX_LUMA } else { &QMATRIX_CHROMA };
         let quality_k = 1.0 - quality;
@@ -1184,7 +1182,7 @@ impl Block {
                 .map(|(xy, g)| g * DCT_K[unwrapped_index][xy])
                 .sum();
             // Quantization
-            let k = QMATRIX_LUMA[unwrapped_index]; //2.0 * (qmatrix[unwrapped_index] - 1.0) * quality_k + 1.0;
+            let k = 2.0 * (qmatrix[unwrapped_index] - 1.0) * quality_k + 1.0;
             let pixel = (pixel / k).round();
             *d = pixel as i16;
         }
@@ -1257,14 +1255,12 @@ impl Block {
         let huffman_dc = if is_luma {
             &HUFFMAN_DECODE_DC_LUMA
         } else {
-            //&HUFFMAN_DECODE_DC_CHROMA
-            &HUFFMAN_DECODE_DC_LUMA
+            &HUFFMAN_DECODE_DC_CHROMA
         };
         let huffman_ac = if is_luma {
             &HUFFMAN_DECODE_AC_LUMA
         } else {
-            //&HUFFMAN_DECODE_AC_CHROMA
-            &HUFFMAN_DECODE_AC_LUMA
+            &HUFFMAN_DECODE_AC_CHROMA
         };
         let qmatrix = if is_luma { &QMATRIX_LUMA } else { &QMATRIX_CHROMA };
         let quality_k = 1.0 - quality;
@@ -1296,7 +1292,7 @@ impl Block {
         // Revert
         // Dequantization
         for (i, d) in temp.iter_mut().enumerate() {
-            *d *= QMATRIX_LUMA[UNWRAP_PATTERN[i]]; //2.0 * (qmatrix[UNWRAP_PATTERN[i]] - 1.0) * quality_k + 1.0;
+            *d *= 2.0 * (qmatrix[UNWRAP_PATTERN[i]] - 1.0) * quality_k + 1.0;
         }
         /*for (i, d) in self.0.iter_mut().enumerate() {
             *d = temp[WRAP_PATTERN[i]];

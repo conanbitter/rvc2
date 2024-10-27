@@ -85,7 +85,7 @@ fn compress_plane(plane: &Plane, writer: &mut BitWriter, is_luma: bool, quality:
     for by in 0..plane.height() / 8 {
         for bx in 0..plane.width() / 8 {
             plane.extract_block(bx * 8, by * 8, &mut block);
-            //block.normalize();
+            block.normalize();
             block.encode2(writer, is_luma, quality)?;
         }
     }
@@ -97,7 +97,7 @@ fn unpack_plane(plane: &mut Plane, reader: &mut BitReader, is_luma: bool, qualit
     for by in 0..plane.height() / 8 {
         for bx in 0..plane.width() / 8 {
             block.decode2(reader, is_luma, quality)?;
-            //block.denormalize();
+            block.denormalize();
             plane.apply_block(bx * 8, by * 8, &block);
         }
     }
@@ -179,8 +179,8 @@ fn main() -> Result<()> {
     println!("Start decoding");
     let now = Instant::now();
     unpack_plane(&mut plane_ay_res, &mut reader, true, all_quality)?;
-    unpack_plane(&mut plane_au_res, &mut reader, true, all_quality)?;
-    unpack_plane(&mut plane_av_res, &mut reader, true, all_quality)?;
+    unpack_plane(&mut plane_au_res, &mut reader, false, all_quality)?;
+    unpack_plane(&mut plane_av_res, &mut reader, false, all_quality)?;
 
     //Plane::plane2luma(&plane_ay_res, &mut result_y_res);
     //Plane::plane2luma(&plane_au_res, &mut result_u_res);
