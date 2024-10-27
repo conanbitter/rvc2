@@ -104,6 +104,9 @@ impl<'a> BitWriter<'a> {
 
     pub fn write_vec(&mut self, values: &[i8]) -> Result<()> {
         //print!("vec:{:?}|", values);
+        if values[0] < 0 {
+            bail!("Wrong Huffman entry");
+        }
         for d in values {
             if *d < 0 {
                 return Ok(());
