@@ -434,14 +434,24 @@ def gen_decoder(codelist):
 
         coded.append(citem)
 
-    print(coded)
     print(len(coded))
-    for node in coded:
-        print(node, ",")
+    print(coded)
+    # for node in coded:
+    #    print(node, ",")
 
 
-def gen_encoder(codelist):
-    sorted = [['-1'] * 16] * len(codelist)
+def gen_encoder(codelist, max=-1):
+    count = 0
+    if max > 0:
+        count = max
+    else:
+        for item in codelist:
+            if item[1] > count:
+                count = item[1]
+        count += 1
+    print(count)
+
+    sorted = [['-1'] * 16] * count
 
     for item in codelist:
         bits = [*item[0]]
@@ -453,4 +463,5 @@ def gen_encoder(codelist):
         print("[{}],".format(", ".join(item)))
 
 
-gen_encoder(codes_dc)
+# gen_encoder(codes_ac_chroma, max=256)
+gen_decoder(codes_ac_chroma)
