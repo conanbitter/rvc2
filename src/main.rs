@@ -107,7 +107,7 @@ fn main() -> Result<()> {
     let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
 
-    let (image_width, image_height) = ImageReader::open("data/test1.png")?.into_dimensions()?;
+    let (image_width, image_height) = ImageReader::open("data/043.tif")?.into_dimensions()?;
     let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
     let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
     let uv_plane_width = y_plane_width / 2;
@@ -117,12 +117,22 @@ fn main() -> Result<()> {
     let mut plane_au = Plane::new(uv_plane_width, uv_plane_height);
     let mut plane_av = Plane::new(uv_plane_width, uv_plane_height);
 
-    //let mut plane_by = Plane::new(y_plane_width, y_plane_height);
-    //let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
-    //let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
+    let mut plane_by = Plane::new(y_plane_width, y_plane_height);
+    let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
+    let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
 
-    Plane::image2planes("data/test1.png", &mut plane_ay, &mut plane_au, &mut plane_av)?;
-    //Plane::image2planes("data/059.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
+    Plane::image2planes("data/043.tif", &mut plane_ay, &mut plane_au, &mut plane_av)?;
+    Plane::image2planes("data/042.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
+
+    /*for (a, b) in plane_ay.data.iter_mut().zip(plane_by.data.iter_mut()) {
+        *a -= *b;
+    }
+    for (a, b) in plane_au.data.iter_mut().zip(plane_bu.data.iter_mut()) {
+        *a -= *b;
+    }
+    for (a, b) in plane_av.data.iter_mut().zip(plane_bv.data.iter_mut()) {
+        *a -= *b;
+    }*/
 
     let mut result_y = ImageBuffer::new(y_plane_width, y_plane_height);
     let mut result_u = ImageBuffer::new(uv_plane_width, uv_plane_height);
@@ -137,7 +147,7 @@ fn main() -> Result<()> {
     result_y.save("data/result_y.png")?;
     result_u.save("data/result_u.png")?;
     result_v.save("data/result_v.png")?;
-    result_full.save("data/test1_1.png")?;
+    result_full.save("data/043_1.png")?;
 
     compress_plane(&plane_ay, &mut writer)?;
     compress_plane(&plane_au, &mut writer)?;
@@ -174,7 +184,7 @@ fn main() -> Result<()> {
     result_y_res.save("data/result_y_res.png")?;
     result_u_res.save("data/result_u_res.png")?;
     result_v_res.save("data/result_v_res.png")?;
-    result_full_res.save("data/test1_1_comp.png")?;
+    result_full_res.save("data/043_1_comp.png")?;
     /*
         let img = ImageReader::open("data/056.tif")?.decode()?.to_rgb8();
 

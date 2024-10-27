@@ -174,6 +174,21 @@ codes2 = [
     ("1111", 9),
 ]
 
+codes_dc = [
+    ("000", 0),
+    ("010", 1),
+    ("011", 2),
+    ("100", 3),
+    ("101", 4),
+    ("110", 5),
+    ("1110", 6),
+    ("11110", 7),
+    ("111110", 8),
+    ("1111110", 9),
+    ("11111110", 10),
+    ("111111110", 11),
+]
+
 
 class TreeNode:
     pos = 0
@@ -201,8 +216,8 @@ def treenodes(codelist):
     return TreeNode(treenodes(b0), treenodes(b1))
 
 
-def gen_decoder():
-    root = treenodes(codes)
+def gen_decoder(codelist):
+    root = treenodes(codelist)
     nodes = [root]
     flat = []
     while len(nodes) > 0:
@@ -245,10 +260,10 @@ def gen_decoder():
         print(node, ",")
 
 
-def gen_encoder():
-    sorted = [['-1'] * 16] * 256
+def gen_encoder(codelist):
+    sorted = [['-1'] * 16] * len(codelist)
 
-    for item in codes:
+    for item in codelist:
         bits = [*item[0]]
         bits.extend(['-1'] * (16 - len(item[0])))
         sorted[item[1]] = bits
@@ -258,4 +273,4 @@ def gen_encoder():
         print("[{}],".format(", ".join(item)))
 
 
-gen_decoder()
+gen_encoder(codes_dc)

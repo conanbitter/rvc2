@@ -6,7 +6,7 @@ use image::{GrayImage, ImageReader, Luma, Rgb, RgbImage};
 use crate::blocks::Block;
 
 pub struct Plane {
-    data: Vec<f64>,
+    pub data: Vec<f64>,
     width: u32,
     height: u32,
 }

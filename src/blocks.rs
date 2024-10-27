@@ -41,7 +41,22 @@ const WRAP_PATTERN: [usize; 8 * 8] = [
     35, 36, 48, 49, 57, 58, 62, 63,
 ];
 
-const HUFFMAN_ENCODE: [[i8; 16]; 256] = [
+const HUFFMAN_ENCODE_DC: [[i8; 16]; 12] = [
+    [0, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [0, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [0, 1, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1],
+    [1, 1, 1, 1, 1, 1, 1, 1, 0, -1, -1, -1, -1, -1, -1, -1],
+];
+
+const HUFFMAN_ENCODE_AC: [[i8; 16]; 256] = [
     [1, 0, 1, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
     [0, 0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
     [0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
@@ -300,7 +315,23 @@ const HUFFMAN_ENCODE: [[i8; 16]; 256] = [
     [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
 ];
 
-const HUFFMAN_DECODE: [[i16; 2]; 162] = [
+const HUFFMAN_DECODE_DC: [[i16; 2]; 13] = [
+    [1, 2],
+    [2, 3],
+    [3, 4],
+    [0, 0],
+    [-1, -2],
+    [-3, -4],
+    [-5, 1],
+    [-6, 1],
+    [-7, 1],
+    [-8, 1],
+    [-9, 1],
+    [-10, 1],
+    [-11, 0],
+];
+
+const HUFFMAN_DECODE_AC: [[i16; 2]; 162] = [
     [1, 2],
     [-1, -2],
     [1, 2],
@@ -611,7 +642,7 @@ impl Block {
         }
         return 0;
     }
-
+    /*
     pub fn encode(&self, writer: &mut BitWriter) -> Result<()> {
         let dc = self.0[0] as i16;
         writer.write_vec(&HUFFMAN_ENCODE[Block::int_width(dc) as usize])?;
@@ -645,6 +676,7 @@ impl Block {
         }
         return Ok(());
     }
+    */
 
     fn process_pixel(&self, index: usize) -> i16 {
         let unwrapped_index = UNWRAP_PATTERN[index];
@@ -678,7 +710,7 @@ impl Block {
         }
 
         let dc = temp[0];
-        writer.write_vec(&HUFFMAN_ENCODE[Block::int_width(dc) as usize])?;
+        writer.write_vec(&HUFFMAN_ENCODE_DC[Block::int_width(dc) as usize])?;
         writer.write_varint(dc)?;
         let mut zeroes = 0;
         let mut tail = 0;
@@ -693,24 +725,24 @@ impl Block {
             if item == 0 {
                 zeroes += 1;
                 if zeroes == 16 {
-                    writer.write_vec(&HUFFMAN_ENCODE[0xF0])?;
+                    writer.write_vec(&HUFFMAN_ENCODE_AC[0xF0])?;
                     zeroes = 0;
                 }
             } else {
                 let item_width = Block::int_width(item);
                 let head = (zeroes as u8) << 4 | item_width as u8;
-                writer.write_vec(&HUFFMAN_ENCODE[head as usize])?;
+                writer.write_vec(&HUFFMAN_ENCODE_AC[head as usize])?;
                 writer.write_varint(item)?;
                 zeroes = 0;
             }
         }
         if tail > 0 {
-            writer.write_vec(&HUFFMAN_ENCODE[0x00])?;
+            writer.write_vec(&HUFFMAN_ENCODE_AC[0x00])?;
         }
         return Ok(());
     }
 
-    pub fn decode(&mut self, reader: &mut BitReader) -> Result<()> {
+    /*    pub fn decode(&mut self, reader: &mut BitReader) -> Result<()> {
         for d in self.0.iter_mut() {
             *d = 0.0;
         }
@@ -739,12 +771,12 @@ impl Block {
         }
 
         return Ok(());
-    }
+    }*/
 
     pub fn decode2(&mut self, reader: &mut BitReader) -> Result<()> {
         let mut temp = [0f64; 8 * 8];
 
-        let dc_width = reader.decode_huffman(&HUFFMAN_DECODE)?;
+        let dc_width = reader.decode_huffman(&HUFFMAN_DECODE_DC)?;
         let dc = reader.read_varint(dc_width)?;
 
         temp[0] = dc as f64;
@@ -752,7 +784,7 @@ impl Block {
         let mut i = 1usize;
 
         while i < 64 {
-            let head = reader.decode_huffman(&HUFFMAN_DECODE)?;
+            let head = reader.decode_huffman(&HUFFMAN_DECODE_AC)?;
             if head == 0xF0 {
                 i += 16;
             } else if head == 0x00 {

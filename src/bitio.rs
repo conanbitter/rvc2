@@ -1,6 +1,6 @@
 use std::io::{Read, Write};
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 pub struct BitWriter<'a> {
     data: [u8; 1],
@@ -44,6 +44,7 @@ impl<'a> BitWriter<'a> {
                 self.write_bit(((data >> (width - 1 - i)) & 1) as u8)?;
             }
         }
+        //print!("{}\n", value);
         return Ok(());
     }
 
@@ -102,6 +103,7 @@ impl<'a> BitWriter<'a> {
     }
 
     pub fn write_vec(&mut self, values: &[i8]) -> Result<()> {
+        //print!("vec:{:?}|", values);
         for d in values {
             if *d < 0 {
                 return Ok(());
@@ -152,6 +154,9 @@ impl<'a> BitReader<'a> {
         if width == 0 {
             return Ok(0);
         }
+        if width > 11 {
+            bail!("Width is too big: {}", width);
+        }
 
         let mut result = 0i16;
 
@@ -180,7 +185,7 @@ impl<'a> BitReader<'a> {
         }
 
         //println!("{:016b}", result);
-
+        //print!("{}\n", result);
         return Ok(result);
     }
 }
