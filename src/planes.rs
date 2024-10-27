@@ -3,6 +3,8 @@ use std::path::Path;
 use anyhow::Result;
 use image::{GrayImage, ImageReader, Luma, Rgb, RgbImage};
 
+use crate::blocks::Block;
+
 pub struct Plane {
     data: Vec<f64>,
     width: u32,
@@ -117,6 +119,22 @@ impl Plane {
             let v = vp.get(px / 2, py / 2);
             let (r, g, b) = yuv2rgb(y, u, v);
             *pixel = Rgb([r, g, b]);
+        }
+    }
+
+    pub fn extract_block(&self, x: u32, y: u32, block: &mut Block) {
+        for i in 0..8 {
+            let plane_start = (x + (y + i) * self.width) as usize;
+            let block_start = (i * 8) as usize;
+            block.0[block_start..block_start + 8].copy_from_slice(&self.data[plane_start..plane_start + 8]);
+        }
+    }
+
+    pub fn apply_block(&mut self, x: u32, y: u32, block: &Block) {
+        for i in 0..8 {
+            let plane_start = (x + (y + i) * self.width) as usize;
+            let block_start = (i * 8) as usize;
+            self.data[plane_start..plane_start + 8].copy_from_slice(&block.0[block_start..block_start + 8]);
         }
     }
 }

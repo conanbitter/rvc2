@@ -80,58 +80,8 @@ const ZMP_TRESHOLD: f64 = 128.0; //512.0;
 fn main() -> Result<()> {
     let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
-    let mut output2 = Vec::<u8>::new();
-    let mut writer2 = BitWriter::new(&mut output2);
 
-    let mut test_block = Block([
-        -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
-        -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
-        -61.0, -67.0, -60.0, -24.0, -2.0, -40.0, -60.0, -58.0, -49.0, -63.0, -68.0, -58.0, -51.0, -60.0, -70.0, -53.0,
-        -43.0, -57.0, -64.0, -69.0, -73.0, -67.0, -63.0, -45.0, -41.0, -49.0, -59.0, -60.0, -63.0, -52.0, -50.0, -34.0,
-    ]);
-
-    test_block.encode2(&mut writer2)?;
-    writer2.flush()?;
-
-    let mut calced = Block::new();
-
-    test_block.apply_dct(&mut calced);
-    calced.quantization();
-    calced.unwrap(&mut test_block);
-    println!("{:?}", test_block);
-
-    test_block.encode(&mut writer)?;
-    writer.flush()?;
-    for i in &output {
-        print!("{:08b} ", i);
-    }
-    println!("");
-    for i in &output2 {
-        print!("{:08b} ", i);
-    }
-    println!("");
-
-    let mut outslice = &output[..];
-    let mut reader = BitReader::new(&mut outslice);
-
-    let mut test_block2 = Block::new();
-    test_block2.decode(&mut reader)?;
-    test_block2.wrap(&mut test_block);
-    test_block.dequantization();
-    //test_block.unwrap(&mut test_block2);
-    test_block.revert_dct(&mut test_block2);
-    println!("{:?}", test_block2);
-
-    let mut outslice2 = &output2[..];
-    let mut reader2 = BitReader::new(&mut outslice2);
-    let mut test_block3 = Block::new();
-    test_block3.decode2(&mut reader2)?;
-    test_block3.substract(&test_block2);
-    println!("{:?}", test_block3);
-
-    return Ok(());
-
-    let (image_width, image_height) = ImageReader::open("data/056.tif")?.into_dimensions()?;
+    let (image_width, image_height) = ImageReader::open("data/test6.png")?.into_dimensions()?;
     let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
     let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
     let uv_plane_width = y_plane_width / 2;
@@ -141,28 +91,82 @@ fn main() -> Result<()> {
     let mut plane_au = Plane::new(uv_plane_width, uv_plane_height);
     let mut plane_av = Plane::new(uv_plane_width, uv_plane_height);
 
-    let mut plane_by = Plane::new(y_plane_width, y_plane_height);
-    let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
-    let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
+    //let mut plane_by = Plane::new(y_plane_width, y_plane_height);
+    //let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
+    //let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
 
-    Plane::image2planes("data/056.tif", &mut plane_ay, &mut plane_au, &mut plane_av)?;
-    Plane::image2planes("data/059.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
+    Plane::image2planes("data/test6.png", &mut plane_ay, &mut plane_au, &mut plane_av)?;
+    //Plane::image2planes("data/059.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
 
     let mut result_y = ImageBuffer::new(y_plane_width, y_plane_height);
-    let mut result_u = ImageBuffer::new(uv_plane_width, uv_plane_height);
-    let mut result_v = ImageBuffer::new(uv_plane_width, uv_plane_height);
-    let mut result_full = ImageBuffer::new(image_width, image_height);
+    //let mut result_u = ImageBuffer::new(uv_plane_width, uv_plane_height);
+    //let mut result_v = ImageBuffer::new(uv_plane_width, uv_plane_height);
+    //let mut result_full = ImageBuffer::new(image_width, image_height);
 
-    Plane::plane2luma(&plane_by, &mut result_y);
-    Plane::plane2luma(&plane_bu, &mut result_u);
-    Plane::plane2luma(&plane_bv, &mut result_v);
-    Plane::planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
+    Plane::plane2luma(&plane_ay, &mut result_y);
+    //Plane::plane2luma(&plane_au, &mut result_u);
+    //Plane::plane2luma(&plane_av, &mut result_v);
+    //Plane::planes2image(&plane_ay, &plane_au, &plane_av, &mut result_full);
 
     result_y.save("data/result_y.png")?;
-    result_u.save("data/result_u.png")?;
-    result_v.save("data/result_v.png")?;
-    result_full.save("data/056_1.png")?;
+    //result_u.save("data/result_u.png")?;
+    //result_v.save("data/result_v.png")?;
+    //result_full.save("data/test6_1.png")?;
 
+    let mut plane_ay_res = Plane::new(y_plane_width, y_plane_height);
+
+    let mut prev_block = Block::new();
+    let mut cur_block = Block::new();
+    for by in 0..y_plane_height / 8 {
+        for bx in 0..y_plane_width / 8 {
+            plane_ay.extract_block(bx * 8, by * 8, &mut cur_block);
+            //cur_block.normalize();
+            if bx == 0 && by == 0 {
+                prev_block.clone_from(&cur_block);
+                cur_block.normalize();
+            } else {
+                cur_block.substract_clone(&mut prev_block);
+            }
+            cur_block.encode2(&mut writer)?;
+        }
+    }
+    writer.flush()?;
+
+    let len_compressed = output.len();
+    let len_uncompressed = image_width * image_height;
+    let compression_level = (len_compressed as f64 / len_uncompressed as f64 * 100.0).round() as u32;
+    println!(
+        "size {} of {} ({}%)",
+        len_compressed, len_uncompressed, compression_level
+    );
+
+    let mut outslice = &output[..];
+    let mut reader = BitReader::new(&mut outslice);
+
+    let mut prev_block = Block::new();
+    let mut cur_block = Block::new();
+    for by in 0..y_plane_height / 8 {
+        for bx in 0..y_plane_width / 8 {
+            cur_block.decode2(&mut reader)?;
+            //cur_block.denormalize();
+            if bx == 0 && by == 0 {
+                cur_block.denormalize();
+                prev_block.clone_from(&cur_block);
+            } else {
+                //cur_block.denormalize();
+                cur_block.add(&mut prev_block);
+                prev_block.clone_from(&cur_block);
+            }
+            plane_ay_res.apply_block(bx * 8, by * 8, &cur_block);
+            /*if (bx + by * y_plane_width / 8) > 2 {
+                break;
+            }*/
+        }
+    }
+
+    let mut result_y_res = ImageBuffer::new(y_plane_width, y_plane_height);
+    Plane::plane2luma(&plane_ay_res, &mut result_y_res);
+    result_y_res.save("data/result_y_res.png")?;
     /*
         let img = ImageReader::open("data/056.tif")?.decode()?.to_rgb8();
 

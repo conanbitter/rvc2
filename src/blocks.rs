@@ -794,9 +794,37 @@ impl Block {
         }
     }
 
+    pub fn normalize(&mut self) {
+        for d in self.0.iter_mut() {
+            *d = *d - 128.0;
+        }
+    }
+
+    pub fn substract_clone(&mut self, other: &mut Block) {
+        for (d, oth) in self.0.iter_mut().zip(other.0.iter_mut()) {
+            let old = *d;
+            *d -= *oth;
+            *oth = old;
+        }
+    }
+
     pub fn add(&mut self, other: &Block) {
         for (d, oth) in self.0.iter_mut().zip(other.0) {
             *d = *d + oth;
+        }
+    }
+
+    pub fn denormalize(&mut self) {
+        for d in self.0.iter_mut() {
+            *d = *d + 128.0;
+        }
+    }
+
+    pub fn add_clone(&mut self, other: &mut Block) {
+        for (d, oth) in self.0.iter_mut().zip(other.0.iter_mut()) {
+            let old = *d + *oth;
+            *d += *oth;
+            *oth = old;
         }
     }
 }
