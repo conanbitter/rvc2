@@ -105,7 +105,7 @@ fn unpack_plane(plane: &mut Plane, reader: &mut BitReader, is_luma: bool, qualit
 }
 
 fn main() -> Result<()> {
-    let mut test_block = Block([
+    /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
         -61.0, -67.0, -60.0, -24.0, -2.0, -40.0, -60.0, -58.0, -49.0, -63.0, -68.0, -58.0, -51.0, -60.0, -70.0, -53.0,
@@ -125,9 +125,9 @@ fn main() -> Result<()> {
     println!("New\n{:?}", test_block);
     calced.revert_dct(&mut test_block);
     println!("Old\n{:?}", test_block);
-    return Ok(());
+    return Ok(());*/
 
-    let (image_width, image_height) = ImageReader::open("data/vid/test10/001.tif")?.into_dimensions()?;
+    let (image_width, image_height) = ImageReader::open("data/vid/test13/0001.png")?.into_dimensions()?;
     let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
     let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
     let uv_plane_width = y_plane_width / 2;
@@ -140,11 +140,13 @@ fn main() -> Result<()> {
     //let mut plane_by = Plane::new(y_plane_width, y_plane_height);
     //let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
     //let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
+    const frame_count: i32 = 5851;
+    let mut decode_time = 0f64;
     let mut total = 0u64;
-    for i in 1..=933 {
-        print!("{}/{} ", i, 933);
+    for i in 1..=frame_count {
+        print!("{}/{} ", i, frame_count);
         Plane::image2planes(
-            format!("data/vid/test10/{:03}.tif", i),
+            format!("data/vid/test13/{:04}.png", i),
             &mut plane_ay,
             &mut plane_au,
             &mut plane_av,
@@ -206,7 +208,7 @@ fn main() -> Result<()> {
         let mut result_full_res = ImageBuffer::new(image_width, image_height);
 
         //println!("Start decoding");
-        //let now = Instant::now();
+        let now = Instant::now();
         unpack_plane(&mut plane_ay_res, &mut reader, true, all_quality)?;
         unpack_plane(&mut plane_au_res, &mut reader, false, all_quality)?;
         unpack_plane(&mut plane_av_res, &mut reader, false, all_quality)?;
@@ -215,14 +217,21 @@ fn main() -> Result<()> {
         //Plane::plane2luma(&plane_au_res, &mut result_u_res);
         //Plane::plane2luma(&plane_av_res, &mut result_v_res);
         Plane::planes2image(&plane_ay_res, &plane_au_res, &plane_av_res, &mut result_full_res);
-        //let elapsed = now.elapsed();
+        let elapsed = now.elapsed();
+        decode_time += elapsed.as_secs_f64();
         //println!("Decoded: {:?}", elapsed);
         //result_y_res.save("data/result_y_res.png")?;
         //result_u_res.save("data/result_u_res.png")?;
         //result_v_res.save("data/result_v_res.png")?;
-        result_full_res.save(format!("data/vid/test10_result/{:03}.png", i))?;
+        result_full_res.save(format!("data/vid/test13_result/{:04}.png", i))?;
     }
-    println!("Total: {}", total);
+    let len_uncompressed = image_width * image_height * 3 * frame_count as u32;
+    let compression_level = (total as f64 / len_uncompressed as f64 * 100.0).round() as u32;
+    println!("Total size: {} of {} ({}%)", total, len_uncompressed, compression_level);
+    println!(
+        "Average decoding time: {}ms",
+        decode_time / (frame_count as f64) * 1000.0
+    );
     /*
         let img = ImageReader::open("data/056.tif")?.decode()?.to_rgb8();
 
