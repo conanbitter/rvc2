@@ -121,7 +121,7 @@ fn main() -> Result<()> {
     println!("new dct:{:?}", now.elapsed());
     println!("Old\n{:?}", calced);
     println!("New\n{:?}", test_block);
-    test_block.apply_undct2();
+    test_block.revert_dct2();
     println!("New\n{:?}", test_block);
     calced.revert_dct(&mut test_block);
     println!("Old\n{:?}", test_block);
