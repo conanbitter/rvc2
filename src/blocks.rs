@@ -961,6 +961,7 @@ const HUFFMAN_DECODE_AC_CHROMA: [[i16; 2]; 162] = [
 ];
 
 type DctMatrix = [[f64; 8 * 8]; 8 * 8];
+type DctVector = [[f64; 8]; 8];
 
 static DCT_K: Lazy<DctMatrix> = Lazy::<DctMatrix>::new(|| {
     let mut result = [[0f64; 8 * 8]; 8 * 8];
@@ -1008,6 +1009,32 @@ static UNDCT_K: Lazy<DctMatrix> = Lazy::<DctMatrix>::new(|| {
     result
 });
 
+static DCT1D_K: Lazy<DctVector> = Lazy::<DctVector>::new(|| {
+    let mut result = [[0f64; 8]; 8];
+
+    for u in 0..8 {
+        let a = if u == 0 { 1.0 / 2.0f64.sqrt() } else { 1.0 };
+        let pred = a / 2.0;
+        for x in 0..8 {
+            result[u][x] = pred * ((2.0 * x as f64 + 1.0) * u as f64 * PI / 16.0).cos();
+        }
+    }
+    result
+});
+
+static UNDCT1D_K: Lazy<DctVector> = Lazy::<DctVector>::new(|| {
+    let mut result = [[0f64; 8]; 8];
+
+    for x in 0..8 {
+        for u in 0..8 {
+            let a = if u == 0 { 1.0 / 2.0f64.sqrt() } else { 1.0 };
+            let pred = a / 2.0;
+            result[x][u] = pred * ((2.0 * x as f64 + 1.0) * u as f64 * PI / 16.0).cos();
+        }
+    }
+    result
+});
+
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[ ")?;
@@ -1032,6 +1059,46 @@ impl Block {
     pub fn apply_dct(&self, dst: &mut Block) {
         for (uv, d) in dst.0.iter_mut().enumerate() {
             *d = self.0.iter().enumerate().map(|(xy, g)| g * DCT_K[uv][xy]).sum();
+        }
+    }
+
+    pub fn apply_dct_linear(src: &Block, dst: &mut Block, start: usize) {
+        for u in 0..8 {
+            dst.0[start + u * 8] = src.0[start * 8..start * 8 + 8]
+                .iter()
+                .zip(DCT1D_K[u])
+                .map(|(g, k)| g * k)
+                .sum();
+        }
+    }
+
+    pub fn apply_dct2(&mut self) {
+        let mut temp = Block::new();
+        for i in 0..8 {
+            Block::apply_dct_linear(&self, &mut temp, i);
+        }
+        for i in 0..8 {
+            Block::apply_dct_linear(&temp, self, i);
+        }
+    }
+
+    pub fn apply_undct_linear(src: &Block, dst: &mut Block, start: usize) {
+        for x in 0..8 {
+            dst.0[start + x * 8] = src.0[start * 8..start * 8 + 8]
+                .iter()
+                .zip(UNDCT1D_K[x])
+                .map(|(g, k)| g * k)
+                .sum();
+        }
+    }
+
+    pub fn apply_undct2(&mut self) {
+        let mut temp = Block::new();
+        for i in 0..8 {
+            Block::apply_undct_linear(&self, &mut temp, i);
+        }
+        for i in 0..8 {
+            Block::apply_undct_linear(&temp, self, i);
         }
     }
 

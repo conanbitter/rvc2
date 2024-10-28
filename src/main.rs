@@ -105,6 +105,28 @@ fn unpack_plane(plane: &mut Plane, reader: &mut BitReader, is_luma: bool, qualit
 }
 
 fn main() -> Result<()> {
+    let mut test_block = Block([
+        -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
+        -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
+        -61.0, -67.0, -60.0, -24.0, -2.0, -40.0, -60.0, -58.0, -49.0, -63.0, -68.0, -58.0, -51.0, -60.0, -70.0, -53.0,
+        -43.0, -57.0, -64.0, -69.0, -73.0, -67.0, -63.0, -45.0, -41.0, -49.0, -59.0, -60.0, -63.0, -52.0, -50.0, -34.0,
+    ]);
+
+    let mut calced = Block::new();
+    let now = Instant::now();
+    test_block.apply_dct(&mut calced);
+    println!("old dct:{:?}", now.elapsed());
+    let now = Instant::now();
+    test_block.apply_dct2();
+    println!("new dct:{:?}", now.elapsed());
+    println!("Old\n{:?}", calced);
+    println!("New\n{:?}", test_block);
+    test_block.apply_undct2();
+    println!("New\n{:?}", test_block);
+    calced.revert_dct(&mut test_block);
+    println!("Old\n{:?}", test_block);
+    return Ok(());
+
     let (image_width, image_height) = ImageReader::open("data/vid/test10/001.tif")?.into_dimensions()?;
     let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
     let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
