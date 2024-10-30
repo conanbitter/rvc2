@@ -1211,7 +1211,7 @@ impl Block {
         return pixel as i16;
     }
 
-    pub fn encode2(&self, writer: &mut BitWriter, is_luma: bool, quality: f64) -> Result<()> {
+    pub fn encode2(&mut self, writer: &mut BitWriter, is_luma: bool, quality: f64) -> Result<()> {
         let huffman_dc = if is_luma {
             &HUFFMAN_ENCODE_DC_LUMA
         } else {
@@ -1226,21 +1226,18 @@ impl Block {
         let quality_k = 1.0 - quality;
 
         let mut temp = [0i16; 8 * 8];
+        // DCT
+        self.apply_dct2();
+        //println!("{:?}", self);
         // Convert block
         for (i, d) in temp.iter_mut().enumerate() {
             let unwrapped_index = UNWRAP_PATTERN[i];
-            // DCT
-            let pixel: f64 = self
-                .0
-                .iter()
-                .enumerate()
-                .map(|(xy, g)| g * DCT_K[unwrapped_index][xy])
-                .sum();
             // Quantization
             let k = 2.0 * (qmatrix[unwrapped_index] - 1.0) * quality_k + 1.0;
-            let pixel = (pixel / k).round();
+            let pixel = (self.0[unwrapped_index] / k).round();
             *d = pixel as i16;
         }
+        //println!("{:?}", temp);
 
         let dc = temp[0];
         writer.write_vec(&huffman_dc[Block::int_width(dc) as usize])?;
@@ -1344,24 +1341,18 @@ impl Block {
             }
         }
 
+        //println!("{:?}", temp);
         // Revert
         // Dequantization
-        for (i, d) in temp.iter_mut().enumerate() {
-            *d *= 2.0 * (qmatrix[UNWRAP_PATTERN[i]] - 1.0) * quality_k + 1.0;
+        for (i, d) in temp.iter().enumerate() {
+            self.0[UNWRAP_PATTERN[i]] = d * (2.0 * (qmatrix[UNWRAP_PATTERN[i]] - 1.0) * quality_k + 1.0);
         }
+        //println!("{:?}", self);
         /*for (i, d) in self.0.iter_mut().enumerate() {
             *d = temp[WRAP_PATTERN[i]];
         }
         println!("{:?}", self);*/
-        for (i, d) in self.0.iter_mut().enumerate() {
-            //let wrapped_index = ;
-            // Revert DCT
-            *d = temp
-                .iter()
-                .enumerate()
-                .map(|(uv, g)| g * UNDCT_K[i][UNWRAP_PATTERN[uv]])
-                .sum();
-        }
+        self.revert_dct2();
 
         return Ok(());
     }
