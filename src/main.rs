@@ -70,15 +70,24 @@ fn load_planes<P: AsRef<Path>>(
 
     return Ok(());
 }
-
-fn block_sad(a: &Array2<f64>, ax: usize, ay: usize, b: &Array2<f64>, bx: usize, by: usize) -> f64 {
-    let block1 = a.slice(s![ax..ax + 8, ay..ay + 8]);
-    let block2 = b.slice(s![bx..bx + 8, by..by + 8]);
-    return block1.iter().zip(block2.iter()).map(|(a, b)| (a - b).abs()).sum();
+*/
+fn block_sad(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
+    let mut accum = 0f64;
+    for y in 0..8 {
+        let astart = (ax + (ay + y) * a.width()) as usize;
+        let bstart = (bx + (by + y) * b.width()) as usize;
+        let aline = &a.data[astart..astart + 8];
+        let bline = &b.data[bstart..bstart + 8];
+        accum += aline
+            .iter()
+            .zip(bline.iter())
+            .map(|(a, b)| (*a - *b).abs())
+            .sum::<f64>();
+    }
+    return accum;
 }
 
-const ZMP_TRESHOLD: f64 = 128.0; //512.0;
-*/
+const ZMP_TRESHOLD: f64 = 512.0;
 
 fn compress_plane(plane: &Plane, writer: &mut BitWriter, is_luma: bool, quality: f64) -> Result<()> {
     let mut block = Block::new();
@@ -112,6 +121,17 @@ fn main() -> Result<()> {
         -43.0, -57.0, -64.0, -69.0, -73.0, -67.0, -63.0, -45.0, -41.0, -49.0, -59.0, -60.0, -63.0, -52.0, -50.0, -34.0,
     ]);
 
+    let mut output = Vec::<u8>::new();
+    let mut writer = BitWriter::new(&mut output);
+    test_block.encode2(&mut writer, true, 0.9)?;
+    writer.flush()?;
+    let mut outslice = &output[..];
+    let mut reader = BitReader::new(&mut outslice);
+    test_block.decode2(&mut reader, true, 0.9)?;
+    println!("{:?}", test_block);
+    return Ok(());*/
+
+    /*
     let mut calced = Block::new();
     let now = Instant::now();
     test_block.apply_dct(&mut calced);
@@ -126,7 +146,7 @@ fn main() -> Result<()> {
     calced.revert_dct(&mut test_block);
     println!("Old\n{:?}", test_block);
     return Ok(());*/
-
+    /*
     let (image_width, image_height) = ImageReader::open("data/vid/test13/0001.png")?.into_dimensions()?;
     let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
     let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
@@ -225,136 +245,116 @@ fn main() -> Result<()> {
         //result_v_res.save("data/result_v_res.png")?;
         result_full_res.save(format!("data/vid/test13_result/{:04}.png", i))?;
     }
-    let len_uncompressed = image_width * image_height * 3 * frame_count as u32;
+    let len_uncompressed = image_width as u64 * image_height as u64 * 3 * frame_count as u64;
     let compression_level = (total as f64 / len_uncompressed as f64 * 100.0).round() as u32;
     println!("Total size: {} of {} ({}%)", total, len_uncompressed, compression_level);
     println!(
         "Average decoding time: {}ms",
         decode_time / (frame_count as f64) * 1000.0
     );
-    /*
-        let img = ImageReader::open("data/056.tif")?.decode()?.to_rgb8();
+    */
+    let (image_width, image_height) = ImageReader::open("data/076.tif")?.into_dimensions()?;
 
-        let image_width = img.width() as usize;
-        let image_height = img.height() as usize;
-        let y_plane_width = (image_width as f64 / 16.0).ceil() as usize * 16;
-        let y_plane_height = (image_height as f64 / 16.0).ceil() as usize * 16;
-        let uv_plane_width = y_plane_width / 2;
-        let uv_plane_height = y_plane_height / 2;
+    let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
+    let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
+    let uv_plane_width = y_plane_width / 2;
+    let uv_plane_height = y_plane_height / 2;
 
-        println!(
-            "    image: {}x{}\n  Y plane: {}x{}\nUV planes: {}x{}",
-            image_width, image_height, y_plane_width, y_plane_height, uv_plane_width, uv_plane_height
-        );
+    println!(
+        "    image: {}x{}\n  Y plane: {}x{}\nUV planes: {}x{}",
+        image_width, image_height, y_plane_width, y_plane_height, uv_plane_width, uv_plane_height
+    );
 
-        let y_dims = (y_plane_width, y_plane_height).f();
-        let uv_dims = (uv_plane_width, uv_plane_height).f();
+    let mut plane_ay = Plane::new(y_plane_width, y_plane_height);
+    let mut plane_au = Plane::new(uv_plane_width, uv_plane_height);
+    let mut plane_av = Plane::new(uv_plane_width, uv_plane_height);
 
-        let mut y_plane = Array2::<f64>::zeros(y_dims);
-        let mut u_plane = Array2::<f64>::zeros(uv_dims);
-        let mut v_plane = Array2::<f64>::zeros(uv_dims);
+    let mut plane_by = Plane::new(y_plane_width, y_plane_height);
+    let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
+    let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
 
-        let mut y_plane2 = Array2::<f64>::zeros(y_dims);
-        let mut u_plane2 = Array2::<f64>::zeros(uv_dims);
-        let mut v_plane2 = Array2::<f64>::zeros(uv_dims);
+    Plane::image2planes("data/076.tif", &mut plane_ay, &mut plane_au, &mut plane_av)?;
+    Plane::image2planes("data/079.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
 
-        load_planes("data/056.tif", &mut y_plane, &mut u_plane, &mut v_plane)?;
-        load_planes("data/059.tif", &mut y_plane2, &mut u_plane2, &mut v_plane2)?;
+    let mv_width = y_plane_width / 16;
+    let mv_height = y_plane_height / 16;
+    let mut motion_vectors = vec![(0i32, 0i32); (mv_width * mv_height) as usize];
 
-        let mut block_diff = Array2::<(i32, i32)>::from_elem((y_plane_width / 8, y_plane_height / 8).f(), (0, 0));
-        for ((x, y), d) in block_diff.indexed_iter_mut() {
-            let dst_x = x * 8;
-            let dst_y = y * 8;
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let mv_index = (mx + my * mv_width) as usize;
+            let dst_x = mx * 16;
+            let dst_y = my * 16;
+
             let mut vect = (0i32, 0i32);
-            let mut min_d = block_sad(&y_plane2, dst_x, dst_y, &y_plane, dst_x, dst_y);
-
+            let mut min_d = block_sad(&plane_by, dst_x, dst_y, &plane_ay, dst_x, dst_y);
             if min_d > ZMP_TRESHOLD {
-                for by in max(dst_y as i32 - 8, 0)..=min(dst_y as i32 + 8, y_plane_height as i32 - 1 - 8) {
-                    for bx in max(dst_x as i32 - 8, 0)..=min(dst_x as i32 + 8, y_plane_width as i32 - 1 - 8) {
-                        let new_d = block_sad(&y_plane2, dst_x, dst_y, &y_plane, bx as usize, by as usize);
+                for by in max(dst_y as i32 - 7, 0)..=min(dst_y as i32 + 7, y_plane_height as i32 - 1 - 16) {
+                    for bx in max(dst_x as i32 - 7, 0)..=min(dst_x as i32 + 7, y_plane_width as i32 - 1 - 16) {
+                        let new_d = block_sad(&plane_by, dst_x, dst_y, &plane_ay, bx as u32, by as u32);
                         if new_d < min_d {
                             min_d = new_d;
                             vect = (bx - dst_x as i32, by - dst_y as i32);
                         }
                     }
                 }
-                if min_d > ZMP_TRESHOLD {
-                    *d = (100, 100);
-                } else {
-                    *d = vect
-                };
             }
-            *d = vect;
-            println!("x: {} y:{}", x, y);
-        }
-
-        //println!("max diff: {:?}", block_diff);
-
-        /*let mut result_diff = ImageBuffer::new(y_plane_width as u32, y_plane_height as u32);
-        for py in 0..y_plane_height {
-            for px in 0..y_plane_width {
-                let (vx, vy) = block_diff[(px / 8, py / 8)];
-                let r = ((vx + 8) * 15) as u8;
-                let g = ((vy + 8) * 15) as u8;
-                let c = Rgb([r, g, 0]);
-
-                result_diff.put_pixel(px as u32, py as u32, c);
+            if min_d > ZMP_TRESHOLD {
+                vect = (100, 100);
             }
+            motion_vectors[mv_index] = vect;
         }
+    }
 
-        result_diff.save("data/result_diff.png")?;*/
+    let mut result_full = ImageBuffer::new(image_width as u32, image_height as u32);
+    Plane::planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
+    result_full.save("data/076_1.png")?;
 
-        let mut result_y = ImageBuffer::new(y_plane_width as u32, y_plane_height as u32);
-        let mut result_u = ImageBuffer::new(uv_plane_width as u32, uv_plane_height as u32);
-        let mut result_v = ImageBuffer::new(uv_plane_width as u32, uv_plane_height as u32);
-        let mut result_full = ImageBuffer::new(image_width as u32, image_height as u32);
+    let mut temp_block = Block::new();
 
-        for py in 0..y_plane_height {
-            for px in 0..y_plane_width {
-                let y = y_plane2[(px, py)];
-                let u = u_plane2[(px / 2, py / 2)];
-                let v = v_plane2[(px / 2, py / 2)];
-                let (r, g, b) = yuv2rgb(y, u, v);
-
-                result_y.put_pixel(px as u32, py as u32, Luma([y as u8]));
-                result_u.put_pixel(px as u32 / 2, py as u32 / 2, Luma([u as u8]));
-                result_v.put_pixel(px as u32 / 2, py as u32 / 2, Luma([v as u8]));
-                if px < image_width && py < image_height {
-                    result_full.put_pixel(px as u32, py as u32, Rgb([r, g, b]));
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let (vx, vy) = motion_vectors[(mx + my * mv_width) as usize];
+            if (vx == 0 && vy == 0) || (vx >= 100) {
+                continue;
+            }
+            /*let lx = (mx * 16 + 4) as u32;
+            let ly = (my * 16 + 4) as u32;
+            if vx >= 100 {
+                if lx < image_width && ly < image_height {
+                    result_full.put_pixel(lx, ly, Rgb([255, 0, 0]));
                 }
-            }
-        }
+            } else {
+                let start = (lx as f32, ly as f32);
+                let end = (lx as f32 + vx as f32, ly as f32 + vy as f32);
 
-        for py in 0..y_plane_height / 8 {
-            for px in 0..y_plane_width / 8 {
-                let (vx, vy) = block_diff[(px, py)];
-                if vx == 0 && vy == 0 {
-                    continue;
+                let liner = BresenhamLineIter::new(start, end);
+                for (lx, ly) in liner {
+                    if lx >= 0 && lx < image_width as i32 && ly >= 0 && ly < image_height as i32 {
+                        result_full.put_pixel(lx as u32, ly as u32, Rgb([0, 255, 0]));
+                    };
                 }
-                if vx >= 100 {
-                    let lx = (px * 8 + 4) as u32;
-                    let ly = (py * 8 + 4) as u32;
-                    if lx < image_width as u32 && ly < image_height as u32 {
-                        result_full.put_pixel(lx, ly, Rgb([255, 0, 0]));
-                    }
-                } else {
-                    let start = ((px * 8 + 4) as f32, (py * 8 + 4) as f32);
-                    let end = ((px as i32 * 8 + 4 + vx) as f32, (py as i32 * 8 + 4 + vy) as f32);
+            }*/
 
-                    let liner = BresenhamLineIter::new(start, end);
-                    for (lx, ly) in liner {
-                        if lx >= 0 && lx < image_width as i32 && ly >= 0 && ly < image_height as i32 {
-                            result_full.put_pixel(lx as u32, ly as u32, Rgb([0, 255, 0]));
-                        };
-                    }
-                }
-            }
+            let lx = (mx * 16) as i32;
+            let ly = (my * 16) as i32;
+            //println!("m {} {}  v {} {}  l {} {}", mx, my, vx, vy, lx, ly);
+            plane_ay.extract_block((lx + vx) as u32, (ly + vy) as u32, &mut temp_block);
+            plane_by.apply_block(lx as u32, ly as u32, &temp_block);
+            plane_ay.extract_block((lx + 8 + vx) as u32, (ly + vy) as u32, &mut temp_block);
+            plane_by.apply_block(lx as u32 + 8, ly as u32, &temp_block);
+            plane_ay.extract_block((lx + 8 + vx) as u32, (ly + 8 + vy) as u32, &mut temp_block);
+            plane_by.apply_block(lx as u32 + 8, ly as u32 + 8, &temp_block);
+            plane_ay.extract_block((lx + vx) as u32, (ly + 8 + vy) as u32, &mut temp_block);
+            plane_by.apply_block(lx as u32, ly as u32 + 8, &temp_block);
+
+            /*plane_au.extract_block((lx + vx / 2) as u32, (ly + vy / 2) as u32, &mut temp_block);
+            plane_bu.apply_block(lx as u32, ly as u32, &temp_block);
+            plane_av.extract_block((lx + vx / 2) as u32, (ly + vy / 2) as u32, &mut temp_block);
+            plane_bv.apply_block(lx as u32, ly as u32, &temp_block);*/
         }
-
-        result_y.save("data/result_y.png")?;
-        result_u.save("data/result_u.png")?;
-        result_v.save("data/result_v.png")?;
-        result_full.save("data/56_1.png")?;
-    */
+    }
+    Plane::planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
+    result_full.save("data/076_2.png")?;
     Ok(())
 }
