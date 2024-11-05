@@ -9,7 +9,9 @@ use std::{
 
 mod bitio;
 mod blocks;
+mod colors;
 mod planes;
+mod videocode;
 
 use anyhow::Result;
 use bitio::{BitReader, BitWriter};
@@ -20,6 +22,7 @@ use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
 use planes::Plane;
+use videocode::VideoFrame;
 
 /*
 fn calc_dct(src: &[f64], dst: &mut [f64]) {
@@ -71,6 +74,12 @@ fn load_planes<P: AsRef<Path>>(
     return Ok(());
 }
 */
+#[derive(Clone, Copy)]
+enum MacroblockType {
+    New,
+    Motion(i32, i32),
+}
+
 fn block_sad(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
     let mut accum = 0f64;
     for y in 0..8 {
@@ -255,30 +264,15 @@ fn main() -> Result<()> {
     */
     let (image_width, image_height) = ImageReader::open("data/076.tif")?.into_dimensions()?;
 
-    let y_plane_width = (image_width as f64 / 16.0).ceil() as u32 * 16;
-    let y_plane_height = (image_height as f64 / 16.0).ceil() as u32 * 16;
-    let uv_plane_width = y_plane_width / 2;
-    let uv_plane_height = y_plane_height / 2;
+    let mut frame_a = VideoFrame::new(image_width, image_height);
+    let mut frame_b = VideoFrame::new(image_width, image_height);
 
-    println!(
-        "    image: {}x{}\n  Y plane: {}x{}\nUV planes: {}x{}",
-        image_width, image_height, y_plane_width, y_plane_height, uv_plane_width, uv_plane_height
-    );
+    frame_a.load_from_image("data/076.tif")?;
+    frame_b.load_from_image("data/079.tif")?;
 
-    let mut plane_ay = Plane::new(y_plane_width, y_plane_height);
-    let mut plane_au = Plane::new(uv_plane_width, uv_plane_height);
-    let mut plane_av = Plane::new(uv_plane_width, uv_plane_height);
-
-    let mut plane_by = Plane::new(y_plane_width, y_plane_height);
-    let mut plane_bu = Plane::new(uv_plane_width, uv_plane_height);
-    let mut plane_bv = Plane::new(uv_plane_width, uv_plane_height);
-
-    Plane::image2planes("data/076.tif", &mut plane_ay, &mut plane_au, &mut plane_av)?;
-    Plane::image2planes("data/079.tif", &mut plane_by, &mut plane_bu, &mut plane_bv)?;
-
-    let mv_width = y_plane_width / 16;
-    let mv_height = y_plane_height / 16;
-    let mut motion_vectors = vec![(0i32, 0i32); (mv_width * mv_height) as usize];
+    let mv_width = frame_a.width / 16;
+    let mv_height = frame_a.height / 16;
+    let mut block_map = vec![MacroblockType::New; (mv_width * mv_height) as usize];
 
     for my in 0..mv_height {
         for mx in 0..mv_width {
@@ -287,74 +281,28 @@ fn main() -> Result<()> {
             let dst_y = my * 16;
 
             let mut vect = (0i32, 0i32);
-            let mut min_d = block_sad(&plane_by, dst_x, dst_y, &plane_ay, dst_x, dst_y);
+            let mut min_d = block_sad(&frame_b.y_plane, dst_x, dst_y, &frame_a.y_plane, dst_x, dst_y);
             if min_d > ZMP_TRESHOLD {
-                for by in max(dst_y as i32 - 7, 0)..=min(dst_y as i32 + 7, y_plane_height as i32 - 1 - 16) {
-                    for bx in max(dst_x as i32 - 7, 0)..=min(dst_x as i32 + 7, y_plane_width as i32 - 1 - 16) {
-                        let new_d = block_sad(&plane_by, dst_x, dst_y, &plane_ay, bx as u32, by as u32);
+                for by in max(dst_y as i32 - 7, 0)..=min(dst_y as i32 + 7, frame_a.height as i32 - 1 - 16) {
+                    for bx in max(dst_x as i32 - 7, 0)..=min(dst_x as i32 + 7, frame_a.width as i32 - 1 - 16) {
+                        let new_d = block_sad(&frame_b.y_plane, dst_x, dst_y, &frame_a.y_plane, bx as u32, by as u32);
                         if new_d < min_d {
                             min_d = new_d;
                             vect = (bx - dst_x as i32, by - dst_y as i32);
                         }
                     }
                 }
-            }
-            if min_d > ZMP_TRESHOLD {
-                vect = (100, 100);
-            }
-            motion_vectors[mv_index] = vect;
-        }
-    }
-
-    let mut result_full = ImageBuffer::new(image_width as u32, image_height as u32);
-    Plane::planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
-    result_full.save("data/076_1.png")?;
-
-    let mut temp_block = Block::new();
-
-    for my in 0..mv_height {
-        for mx in 0..mv_width {
-            let (vx, vy) = motion_vectors[(mx + my * mv_width) as usize];
-            if (vx == 0 && vy == 0) || (vx >= 100) {
-                continue;
-            }
-            /*let lx = (mx * 16 + 4) as u32;
-            let ly = (my * 16 + 4) as u32;
-            if vx >= 100 {
-                if lx < image_width && ly < image_height {
-                    result_full.put_pixel(lx, ly, Rgb([255, 0, 0]));
+                if min_d > ZMP_TRESHOLD {
+                    block_map[mv_index] = MacroblockType::New;
+                } else {
+                    block_map[mv_index] = MacroblockType::Motion(vect.0, vect.1);
                 }
             } else {
-                let start = (lx as f32, ly as f32);
-                let end = (lx as f32 + vx as f32, ly as f32 + vy as f32);
-
-                let liner = BresenhamLineIter::new(start, end);
-                for (lx, ly) in liner {
-                    if lx >= 0 && lx < image_width as i32 && ly >= 0 && ly < image_height as i32 {
-                        result_full.put_pixel(lx as u32, ly as u32, Rgb([0, 255, 0]));
-                    };
-                }
-            }*/
-
-            let lx = (mx * 16) as i32;
-            let ly = (my * 16) as i32;
-            //println!("m {} {}  v {} {}  l {} {}", mx, my, vx, vy, lx, ly);
-            plane_ay.extract_block((lx + vx) as u32, (ly + vy) as u32, &mut temp_block);
-            plane_by.apply_block(lx as u32, ly as u32, &temp_block);
-            plane_ay.extract_block((lx + 8 + vx) as u32, (ly + vy) as u32, &mut temp_block);
-            plane_by.apply_block(lx as u32 + 8, ly as u32, &temp_block);
-            plane_ay.extract_block((lx + 8 + vx) as u32, (ly + 8 + vy) as u32, &mut temp_block);
-            plane_by.apply_block(lx as u32 + 8, ly as u32 + 8, &temp_block);
-            plane_ay.extract_block((lx + vx) as u32, (ly + 8 + vy) as u32, &mut temp_block);
-            plane_by.apply_block(lx as u32, ly as u32 + 8, &temp_block);
-
-            /*plane_au.extract_block((lx + vx / 2) as u32, (ly + vy / 2) as u32, &mut temp_block);
-            plane_bu.apply_block(lx as u32, ly as u32, &temp_block);
-            plane_av.extract_block((lx + vx / 2) as u32, (ly + vy / 2) as u32, &mut temp_block);
-            plane_bv.apply_block(lx as u32, ly as u32, &temp_block);*/
+                block_map[mv_index] = MacroblockType::Motion(0, 0);
+            }
         }
     }
-    Plane::planes2image(&plane_by, &plane_bu, &plane_bv, &mut result_full);
-    result_full.save("data/076_2.png")?;
+
+    frame_b.save_to_image("data/076_1.png")?;
     Ok(())
 }
