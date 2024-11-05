@@ -4,6 +4,7 @@ use anyhow::Result;
 use image::{ImageBuffer, ImageReader, Rgb};
 
 use crate::{
+    blocks::Block,
     colors::{rgb2yuv, yuv2rgb},
     planes::Plane,
 };
@@ -18,6 +19,8 @@ pub struct VideoFrame {
     pub width: u32,
     pub height: u32,
 }
+
+pub struct MacroBlock(pub [Block; 4 + 1 + 1]);
 
 impl VideoFrame {
     pub fn new(width: u32, height: u32) -> VideoFrame {
@@ -73,5 +76,45 @@ impl VideoFrame {
         }
         image.save(filename)?;
         return Ok(());
+    }
+
+    pub fn extract_macroblock(&self, x: u32, y: u32, block: &mut MacroBlock) {
+        self.y_plane.extract_block(x, y, &mut block.0[0]);
+        self.y_plane.extract_block(x + 8, y, &mut block.0[1]);
+        self.y_plane.extract_block(x, y + 8, &mut block.0[2]);
+        self.y_plane.extract_block(x + 8, y + 8, &mut block.0[3]);
+        self.u_plane.extract_block(x / 2, y / 2, &mut block.0[4]);
+        self.v_plane.extract_block(x / 2, y / 2, &mut block.0[5]);
+    }
+
+    pub fn apply_macroblock(&mut self, x: u32, y: u32, block: &MacroBlock) {
+        self.y_plane.apply_block(x, y, &block.0[0]);
+        self.y_plane.apply_block(x + 8, y, &block.0[1]);
+        self.y_plane.apply_block(x, y + 8, &block.0[2]);
+        self.y_plane.apply_block(x + 8, y + 8, &block.0[3]);
+        self.u_plane.apply_block(x / 2, y / 2, &block.0[4]);
+        self.v_plane.apply_block(x / 2, y / 2, &block.0[5]);
+    }
+}
+
+impl MacroBlock {
+    pub fn new() -> MacroBlock {
+        return MacroBlock(core::array::from_fn(|_| Block::new()));
+    }
+
+    pub fn difference(&mut self, other: &MacroBlock) {
+        for (block, other_block) in self.0.iter_mut().zip(other.0.iter()) {
+            for (d, other_d) in block.0.iter_mut().zip(other_block.0.iter()) {
+                *d -= other_d;
+            }
+        }
+    }
+
+    pub fn add(&mut self, other: &MacroBlock) {
+        for (block, other_block) in self.0.iter_mut().zip(other.0.iter()) {
+            for (d, other_d) in block.0.iter_mut().zip(other_block.0.iter()) {
+                *d += other_d;
+            }
+        }
     }
 }

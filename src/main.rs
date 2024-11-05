@@ -22,7 +22,7 @@ use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
 use planes::Plane;
-use videocode::VideoFrame;
+use videocode::{MacroBlock, VideoFrame};
 
 /*
 fn calc_dct(src: &[f64], dst: &mut [f64]) {
@@ -299,6 +299,26 @@ fn main() -> Result<()> {
                 }
             } else {
                 block_map[mv_index] = MacroblockType::Motion(0, 0);
+            }
+        }
+    }
+
+    let mut macroblock = MacroBlock::new();
+    frame_b.u_plane.fill(0.0);
+    frame_b.v_plane.fill(0.0);
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let mv_index = (mx + my * mv_width) as usize;
+            if let MacroblockType::Motion(vx, vy) = block_map[mv_index] {
+                frame_a.extract_macroblock(
+                    (mx as i32 * 16 + vx) as u32,
+                    (my as i32 * 16 + vy) as u32,
+                    &mut macroblock,
+                );
+                if vx == 0 && vy == 0 {
+                    macroblock.0[4].0.fill(0.0);
+                }
+                frame_b.apply_macroblock(mx * 16, my * 16, &macroblock);
             }
         }
     }
