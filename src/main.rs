@@ -16,6 +16,7 @@ mod videocode;
 use anyhow::Result;
 use bitio::{BitReader, BitWriter};
 use blocks::{Block, QMatrices};
+use humansize::{format_size, BINARY};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
 use ndarray::{s, Array, Array2, ShapeBuilder};
@@ -356,6 +357,7 @@ fn main() -> Result<()> {
     frame.save_to_image("data/test6_codec.png")?;
 
     writer.flush()?;
+    println!("Frame compressed size: {}", format_size(output.len(), BINARY));
     let mut outslice = &output[..];
     let mut reader = BitReader::new(&mut outslice);
 
