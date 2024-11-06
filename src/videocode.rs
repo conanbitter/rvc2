@@ -4,7 +4,8 @@ use anyhow::Result;
 use image::{ImageBuffer, ImageReader, Rgb};
 
 use crate::{
-    blocks::Block,
+    bitio::{BitReader, BitWriter},
+    blocks::{Block, QMatrices},
     colors::{rgb2yuv, yuv2rgb},
     planes::Plane,
 };
@@ -116,5 +117,43 @@ impl MacroBlock {
                 *d += other_d;
             }
         }
+    }
+
+    pub fn encode(&mut self, qmatrices: &QMatrices) {
+        self.0[0].encode3(&qmatrices.luma);
+        self.0[1].encode3(&qmatrices.luma);
+        self.0[2].encode3(&qmatrices.luma);
+        self.0[3].encode3(&qmatrices.luma);
+        self.0[4].encode3(&qmatrices.chroma);
+        self.0[5].encode3(&qmatrices.chroma);
+    }
+
+    pub fn write(&self, writer: &mut BitWriter) -> Result<()> {
+        self.0[0].write(writer, true)?;
+        self.0[1].write(writer, true)?;
+        self.0[2].write(writer, true)?;
+        self.0[3].write(writer, true)?;
+        self.0[4].write(writer, false)?;
+        self.0[5].write(writer, false)?;
+        return Ok(());
+    }
+
+    pub fn decode(&mut self, qmatrices: &QMatrices) {
+        self.0[0].decode3(&qmatrices.luma);
+        self.0[1].decode3(&qmatrices.luma);
+        self.0[2].decode3(&qmatrices.luma);
+        self.0[3].decode3(&qmatrices.luma);
+        self.0[4].decode3(&qmatrices.chroma);
+        self.0[5].decode3(&qmatrices.chroma);
+    }
+
+    pub fn read(&mut self, reader: &mut BitReader) -> Result<()> {
+        self.0[0].read(reader, true)?;
+        self.0[1].read(reader, true)?;
+        self.0[2].read(reader, true)?;
+        self.0[3].read(reader, true)?;
+        self.0[4].read(reader, false)?;
+        self.0[5].read(reader, false)?;
+        return Ok(());
     }
 }

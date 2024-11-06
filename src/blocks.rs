@@ -8,6 +8,11 @@ use crate::bitio::{BitReader, BitWriter};
 #[derive(Clone)]
 pub struct Block(pub [f64; 8 * 8]);
 
+pub struct QMatrices {
+    pub luma: [f64; 8 * 8],
+    pub chroma: [f64; 8 * 8],
+}
+
 const QMATRIX_LUMA: [f64; 8 * 8] = [
     16.0, 11.0, 10.0, 16.0, 24.0, 40.0, 51.0, 61.0, //
     12.0, 12.0, 14.0, 19.0, 26.0, 58.0, 60.0, 55.0, //
@@ -1272,6 +1277,14 @@ impl Block {
         return Ok(());
     }
 
+    pub fn encode3(&mut self, qmatrix: &[f64]) {
+        // DCT
+        self.apply_dct2();
+        // Quantization
+        for (d, q) in self.0.iter_mut().zip(qmatrix.iter()) {
+            *d = (*d / q).round();
+        }
+    }
     /*    pub fn decode(&mut self, reader: &mut BitReader) -> Result<()> {
         for d in self.0.iter_mut() {
             *d = 0.0;
@@ -1302,6 +1315,57 @@ impl Block {
 
         return Ok(());
     }*/
+
+    pub fn write(&self, writer: &mut BitWriter, is_luma: bool) -> Result<()> {
+        let huffman_dc = if is_luma {
+            &HUFFMAN_ENCODE_DC_LUMA
+        } else {
+            &HUFFMAN_ENCODE_DC_CHROMA
+        };
+        let huffman_ac = if is_luma {
+            &HUFFMAN_ENCODE_AC_LUMA
+        } else {
+            &HUFFMAN_ENCODE_AC_CHROMA
+        };
+
+        let mut temp = [0i16; 8 * 8];
+        // Unwrap
+        for (d, uwi) in temp.iter_mut().zip(UNWRAP_PATTERN) {
+            *d = self.0[uwi] as i16;
+        }
+
+        let dc = temp[0];
+        writer.write_vec(&huffman_dc[Block::int_width(dc) as usize])?;
+        writer.write_varint(dc)?;
+        let mut zeroes = 0;
+        let mut tail = 0;
+        for i in 0..8 * 8 {
+            if temp[63 - i] != 0 {
+                break;
+            }
+            tail += 1;
+        }
+        for i in 1..64 - tail {
+            let item = temp[i];
+            if item == 0 {
+                zeroes += 1;
+                if zeroes == 16 {
+                    writer.write_vec(&huffman_ac[0xF0])?;
+                    zeroes = 0;
+                }
+            } else {
+                let item_width = Block::int_width(item);
+                let head = (zeroes as u8) << 4 | item_width as u8;
+                writer.write_vec(&huffman_ac[head as usize])?;
+                writer.write_varint(item)?;
+                zeroes = 0;
+            }
+        }
+        if tail > 0 {
+            writer.write_vec(&huffman_ac[0x00])?;
+        }
+        return Ok(());
+    }
 
     pub fn decode2(&mut self, reader: &mut BitReader, is_luma: bool, quality: f64) -> Result<()> {
         let huffman_dc = if is_luma {
@@ -1357,6 +1421,56 @@ impl Block {
         return Ok(());
     }
 
+    pub fn decode3(&mut self, qmatrix: &[f64]) {
+        for (d, q) in self.0.iter_mut().zip(qmatrix.iter()) {
+            *d = *d * q;
+        }
+        self.revert_dct2();
+    }
+
+    pub fn read(&mut self, reader: &mut BitReader, is_luma: bool) -> Result<()> {
+        let huffman_dc = if is_luma {
+            &HUFFMAN_DECODE_DC_LUMA
+        } else {
+            &HUFFMAN_DECODE_DC_CHROMA
+        };
+        let huffman_ac = if is_luma {
+            &HUFFMAN_DECODE_AC_LUMA
+        } else {
+            &HUFFMAN_DECODE_AC_CHROMA
+        };
+
+        let mut temp = [0i16; 8 * 8];
+
+        let dc_width = reader.decode_huffman(huffman_dc)?;
+        let dc = reader.read_varint(dc_width)?;
+
+        temp[0] = dc;
+
+        let mut i = 1usize;
+
+        while i < 64 {
+            let head = reader.decode_huffman(huffman_ac)?;
+            if head == 0xF0 {
+                i += 16;
+            } else if head == 0x00 {
+                break;
+            } else {
+                let item_width = head & 0b1111;
+                let zeroes = head >> 4;
+                i += zeroes as usize;
+                temp[i] = reader.read_varint(item_width)?;
+                i += 1;
+            }
+        }
+
+        // Wrap
+        for (d, uwi) in temp.iter().zip(UNWRAP_PATTERN) {
+            self.0[uwi] = *d as f64;
+        }
+        return Ok(());
+    }
+
     pub fn normalize(&mut self) {
         for d in self.0.iter_mut() {
             *d = *d - 128.0;
@@ -1367,5 +1481,23 @@ impl Block {
         for d in self.0.iter_mut() {
             *d = *d + 128.0;
         }
+    }
+}
+
+impl QMatrices {
+    pub fn new(quality: f64) -> QMatrices {
+        let quality_k = 1.0 - quality;
+        let mut result = QMatrices {
+            luma: [0.0; 8 * 8],
+            chroma: [0.0; 8 * 8],
+        };
+
+        for (dest, src) in result.luma.iter_mut().zip(QMATRIX_LUMA.iter()) {
+            *dest = 2.0 * (src - 1.0) * quality_k + 1.0;
+        }
+        for (dest, src) in result.chroma.iter_mut().zip(QMATRIX_CHROMA.iter()) {
+            *dest = 2.0 * (src - 1.0) * quality_k + 1.0;
+        }
+        return result;
     }
 }

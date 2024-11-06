@@ -15,7 +15,7 @@ mod videocode;
 
 use anyhow::Result;
 use bitio::{BitReader, BitWriter};
-use blocks::Block;
+use blocks::{Block, QMatrices};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
 use ndarray::{s, Array, Array2, ShapeBuilder};
@@ -262,7 +262,7 @@ fn main() -> Result<()> {
         decode_time / (frame_count as f64) * 1000.0
     );
     */
-    let (image_width, image_height) = ImageReader::open("data/076.tif")?.into_dimensions()?;
+    /*let (image_width, image_height) = ImageReader::open("data/076.tif")?.into_dimensions()?;
 
     let mut frame_a = VideoFrame::new(image_width, image_height);
     let mut frame_b = VideoFrame::new(image_width, image_height);
@@ -323,6 +323,54 @@ fn main() -> Result<()> {
         }
     }
 
-    frame_b.save_to_image("data/076_1.png")?;
+    frame_b.save_to_image("data/076_1.png")?;*/
+    let (image_width, image_height) = ImageReader::open("data/test6.png")?.into_dimensions()?;
+
+    let mut frame = VideoFrame::new(image_width, image_height);
+
+    frame.load_from_image("data/test6.png")?;
+
+    let mut output = Vec::<u8>::new();
+    let mut writer = BitWriter::new(&mut output);
+    let qmatrices = QMatrices::new(0.5);
+
+    let mv_width = frame.width / 16;
+    let mv_height = frame.height / 16;
+
+    let mut macroblock = MacroBlock::new();
+
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let dst_x = mx * 16;
+            let dst_y = my * 16;
+
+            frame.extract_macroblock(dst_x, dst_y, &mut macroblock);
+            macroblock.encode(&qmatrices);
+            macroblock.write(&mut writer)?;
+
+            macroblock.decode(&qmatrices);
+            frame.apply_macroblock(dst_x, dst_y, &macroblock);
+        }
+    }
+
+    frame.save_to_image("data/test6_codec.png")?;
+
+    writer.flush()?;
+    let mut outslice = &output[..];
+    let mut reader = BitReader::new(&mut outslice);
+
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let dst_x = mx * 16;
+            let dst_y = my * 16;
+
+            macroblock.read(&mut reader)?;
+
+            macroblock.decode(&qmatrices);
+            frame.apply_macroblock(dst_x, dst_y, &macroblock);
+        }
+    }
+
+    frame.save_to_image("data/test6_readed.png")?;
     Ok(())
 }
