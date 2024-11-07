@@ -335,9 +335,9 @@ fn main() -> Result<()> {
     let mut motion = MotionMap::new(&frame_a);
     motion.calculate(&frame_b, &frame_a);
 
-    let mut macroblock = MacroBlock::new();
-    frame_b.u_plane.fill(0.0);
-    frame_b.v_plane.fill(0.0);
+    /*let mut macroblock = MacroBlock::new();
+    //frame_b.u_plane.fill(0.0);
+    //frame_b.v_plane.fill(0.0);
     for my in 0..mv_height {
         for mx in 0..mv_width {
             let mv_index = (mx + my * mv_width) as usize;
@@ -348,39 +348,50 @@ fn main() -> Result<()> {
                     &mut macroblock,
                 );
                 if vx == 0 && vy == 0 {
-                    macroblock.0[4].0.fill(0.0);
+                    // macroblock.0[4].0.fill(0.0);
                 }
                 frame_b.apply_macroblock(mx * 16, my * 16, &macroblock);
             }
         }
-    }
+    }*/
 
-    /*let mut output = Vec::<u8>::new();
+    let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
-    let qmatrices = QMatrices::new(0.5);
-
-
+    let qmatrices = QMatrices::new(0.95);
 
     let mut macroblock = MacroBlock::new();
+    let mut macroblock2 = MacroBlock::new();
 
     for my in 0..mv_height {
         for mx in 0..mv_width {
             let dst_x = mx * 16;
             let dst_y = my * 16;
+            let mv_index = (mx + my * mv_width) as usize;
 
-            frame.extract_macroblock(dst_x, dst_y, &mut macroblock);
+            frame_b.extract_macroblock(dst_x, dst_y, &mut macroblock);
+
+            if let BlockType::Motion(vx, vy) = motion.vectors[mv_index] {
+                frame_a.extract_macroblock((dst_x as i32 + vx) as u32, (dst_y as i32 + vy) as u32, &mut macroblock2);
+                macroblock.difference(&macroblock2);
+            }
+
             macroblock.encode(&qmatrices);
             macroblock.write(&mut writer)?;
 
             macroblock.decode(&qmatrices);
-            frame.apply_macroblock(dst_x, dst_y, &macroblock);
+            frame_b.apply_macroblock(dst_x, dst_y, &macroblock);
         }
-    }*/
+    }
+    writer.flush()?;
+    println!(
+        "Frame compressed size: {} ({} bytes)",
+        format_size(output.len(), BINARY),
+        output.len()
+    );
 
-    frame_b.save_to_image("data/076_1.png")?;
+    frame_b.save_to_image("data/076_diff.png")?;
+    /*
 
-    /*writer.flush()?;
-    println!("Frame compressed size: {}", format_size(output.len(), BINARY));
     let mut outslice = &output[..];
     let mut reader = BitReader::new(&mut outslice);
 
