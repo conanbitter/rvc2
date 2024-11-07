@@ -10,6 +10,7 @@ use std::{
 mod bitio;
 mod blocks;
 mod colors;
+mod motion;
 mod planes;
 mod videocode;
 
@@ -19,6 +20,7 @@ use blocks::{Block, QMatrices};
 use humansize::{format_size, BINARY};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
+use motion::{BlockType, MotionMap};
 use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
@@ -75,13 +77,7 @@ fn load_planes<P: AsRef<Path>>(
     return Ok(());
 }
 */
-#[derive(Clone, Copy)]
-enum MacroblockType {
-    New,
-    Motion(i32, i32),
-}
-
-fn block_sad(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
+/*fn block_sad(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
     let mut accum = 0f64;
     for y in 0..8 {
         let astart = (ax + (ay + y) * a.width()) as usize;
@@ -97,7 +93,7 @@ fn block_sad(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
     return accum;
 }
 
-const ZMP_TRESHOLD: f64 = 512.0;
+const ZMP_TRESHOLD: f64 = 512.0;*/
 
 fn compress_plane(plane: &Plane, writer: &mut BitWriter, is_luma: bool, quality: f64) -> Result<()> {
     let mut block = Block::new();
@@ -325,18 +321,45 @@ fn main() -> Result<()> {
     }
 
     frame_b.save_to_image("data/076_1.png")?;*/
-    let (image_width, image_height) = ImageReader::open("data/test6.png")?.into_dimensions()?;
+    let (image_width, image_height) = ImageReader::open("data/076.tif")?.into_dimensions()?;
 
-    let mut frame = VideoFrame::new(image_width, image_height);
+    let mut frame_a = VideoFrame::new(image_width, image_height);
+    let mut frame_b = VideoFrame::new(image_width, image_height);
 
-    frame.load_from_image("data/test6.png")?;
+    frame_a.load_from_image("data/076.tif")?;
+    frame_b.load_from_image("data/079.tif")?;
 
-    let mut output = Vec::<u8>::new();
+    let mv_width = frame_a.width / 16;
+    let mv_height = frame_a.height / 16;
+
+    let mut motion = MotionMap::new(&frame_a);
+    motion.calculate(&frame_b, &frame_a);
+
+    let mut macroblock = MacroBlock::new();
+    frame_b.u_plane.fill(0.0);
+    frame_b.v_plane.fill(0.0);
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let mv_index = (mx + my * mv_width) as usize;
+            if let BlockType::Motion(vx, vy) = motion.vectors[mv_index] {
+                frame_a.extract_macroblock(
+                    (mx as i32 * 16 + vx) as u32,
+                    (my as i32 * 16 + vy) as u32,
+                    &mut macroblock,
+                );
+                if vx == 0 && vy == 0 {
+                    macroblock.0[4].0.fill(0.0);
+                }
+                frame_b.apply_macroblock(mx * 16, my * 16, &macroblock);
+            }
+        }
+    }
+
+    /*let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
     let qmatrices = QMatrices::new(0.5);
 
-    let mv_width = frame.width / 16;
-    let mv_height = frame.height / 16;
+
 
     let mut macroblock = MacroBlock::new();
 
@@ -352,11 +375,11 @@ fn main() -> Result<()> {
             macroblock.decode(&qmatrices);
             frame.apply_macroblock(dst_x, dst_y, &macroblock);
         }
-    }
+    }*/
 
-    frame.save_to_image("data/test6_codec.png")?;
+    frame_b.save_to_image("data/076_1.png")?;
 
-    writer.flush()?;
+    /*writer.flush()?;
     println!("Frame compressed size: {}", format_size(output.len(), BINARY));
     let mut outslice = &output[..];
     let mut reader = BitReader::new(&mut outslice);
@@ -373,6 +396,6 @@ fn main() -> Result<()> {
         }
     }
 
-    frame.save_to_image("data/test6_readed.png")?;
+    frame.save_to_image("data/test6_readed.png")?;*/
     Ok(())
 }
