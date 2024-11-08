@@ -119,6 +119,9 @@ fn unpack_plane(plane: &mut Plane, reader: &mut BitReader, is_luma: bool, qualit
     return Ok(());
 }
 
+const FILE_A: &str = "0690.png";
+const FILE_B: &str = "0693.png";
+const FILE_RES: &str = "0693_motion.png";
 fn main() -> Result<()> {
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
@@ -321,19 +324,21 @@ fn main() -> Result<()> {
     }
 
     frame_b.save_to_image("data/076_1.png")?;*/
-    let (image_width, image_height) = ImageReader::open("data/076.tif")?.into_dimensions()?;
+    let (image_width, image_height) = ImageReader::open(format!("data/{}", FILE_A))?.into_dimensions()?;
 
     let mut frame_a = VideoFrame::new(image_width, image_height);
     let mut frame_b = VideoFrame::new(image_width, image_height);
 
-    frame_a.load_from_image("data/076.tif")?;
-    frame_b.load_from_image("data/079.tif")?;
+    frame_a.load_from_image(format!("data/{}", FILE_A))?;
+    frame_b.load_from_image(format!("data/{}", FILE_B))?;
 
     let mv_width = frame_a.width / 16;
     let mv_height = frame_a.height / 16;
 
+    let qmatrices = QMatrices::new(0.95);
+
     let mut motion = MotionMap::new(&frame_a);
-    motion.calculate(&frame_b, &frame_a);
+    motion.calculate_ult(&frame_b, &frame_a, &qmatrices);
 
     /*let mut macroblock = MacroBlock::new();
     //frame_b.u_plane.fill(0.0);
@@ -357,7 +362,6 @@ fn main() -> Result<()> {
 
     let mut output = Vec::<u8>::new();
     let mut writer = BitWriter::new(&mut output);
-    let qmatrices = QMatrices::new(0.95);
 
     let mut macroblock = MacroBlock::new();
     let mut macroblock2 = MacroBlock::new();
@@ -373,13 +377,14 @@ fn main() -> Result<()> {
             if let BlockType::Motion(vx, vy) = motion.vectors[mv_index] {
                 frame_a.extract_macroblock((dst_x as i32 + vx) as u32, (dst_y as i32 + vy) as u32, &mut macroblock2);
                 macroblock.difference(&macroblock2);
+                frame_b.apply_macroblock(dst_x, dst_y, &macroblock2);
             }
 
             macroblock.encode(&qmatrices);
             macroblock.write(&mut writer)?;
 
             macroblock.decode(&qmatrices);
-            frame_b.apply_macroblock(dst_x, dst_y, &macroblock);
+            //frame_b.apply_macroblock(dst_x, dst_y, &macroblock);
         }
     }
     writer.flush()?;
@@ -389,7 +394,7 @@ fn main() -> Result<()> {
         output.len()
     );
 
-    frame_b.save_to_image("data/076_diff.png")?;
+    frame_b.save_to_image(format!("data/{}", FILE_RES))?;
     /*
 
     let mut outslice = &output[..];

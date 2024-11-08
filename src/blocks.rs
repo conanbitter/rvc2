@@ -1393,7 +1393,9 @@ impl Block {
         return Ok(());
     }
 
-    pub fn get_encoded_size(&self, is_luma: bool) -> usize {
+    pub fn get_encoded_size(&self, qmatrix: &[f64], is_luma: bool) -> usize {
+        let mut tblock = self.clone();
+        tblock.encode3(qmatrix);
         let mut result = 0usize;
 
         let huffman_dc = if is_luma {
@@ -1410,7 +1412,7 @@ impl Block {
         let mut temp = [0i16; 8 * 8];
         // Unwrap
         for (d, uwi) in temp.iter_mut().zip(UNWRAP_PATTERN) {
-            *d = self.0[uwi] as i16;
+            *d = tblock.0[uwi] as i16;
         }
 
         let dc = temp[0];

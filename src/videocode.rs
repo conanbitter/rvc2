@@ -138,13 +138,13 @@ impl MacroBlock {
         return Ok(());
     }
 
-    pub fn get_encoded_size(&self) -> usize {
-        self.0[0].get_encoded_size(true)
-            + self.0[1].get_encoded_size(true)
-            + self.0[2].get_encoded_size(true)
-            + self.0[3].get_encoded_size(true)
-            + self.0[4].get_encoded_size(false)
-            + self.0[5].get_encoded_size(false)
+    pub fn get_encoded_size(&self, qmatrices: &QMatrices) -> usize {
+        self.0[0].get_encoded_size(&qmatrices.luma, true)
+            + self.0[1].get_encoded_size(&qmatrices.luma, true)
+            + self.0[2].get_encoded_size(&qmatrices.luma, true)
+            + self.0[3].get_encoded_size(&qmatrices.luma, true)
+            + self.0[4].get_encoded_size(&qmatrices.chroma, false)
+            + self.0[5].get_encoded_size(&qmatrices.chroma, false)
     }
 
     pub fn decode(&mut self, qmatrices: &QMatrices) {
