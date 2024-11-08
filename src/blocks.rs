@@ -605,6 +605,32 @@ const HUFFMAN_ENCODE_AC_CHROMA: [[i8; 16]; 256] = [
     [-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1],
 ];
 
+const HUFFMAN_SIZE_DC_LUMA: [usize; 12] = [2, 3, 3, 3, 3, 3, 4, 5, 6, 7, 8, 9];
+
+const HUFFMAN_SIZE_AC_LUMA: [usize; 256] = [
+    4, 2, 2, 3, 4, 5, 7, 8, 10, 16, 16, 0, 0, 0, 0, 0, 0, 4, 5, 7, 9, 11, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 5, 8,
+    10, 12, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 6, 9, 12, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 6, 10,
+    16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 7, 11, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 7, 12,
+    16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 8, 12, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 15,
+    16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 16,
+    16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 10, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 10, 16,
+    16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 11, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 16, 16,
+    16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 11, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0,
+];
+
+const HUFFMAN_SIZE_DC_CHROMA: [usize; 12] = [2, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+const HUFFMAN_SIZE_AC_CHROMA: [usize; 256] = [
+    2, 2, 3, 4, 5, 5, 6, 7, 9, 10, 12, 0, 0, 0, 0, 0, 0, 4, 6, 8, 9, 11, 12, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 5, 8,
+    10, 12, 15, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 5, 8, 10, 12, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 6, 9, 16,
+    16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 6, 10, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 7, 11, 16,
+    16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 7, 11, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 8, 16, 16,
+    16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 16, 16,
+    16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 9, 16, 16,
+    16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 11, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 0, 14, 16, 16,
+    16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0, 10, 15, 16, 16, 16, 16, 16, 16, 16, 16, 16, 0, 0, 0, 0, 0,
+];
+
 const HUFFMAN_DECODE_DC_LUMA: [[i16; 2]; 12] = [
     [1, 2],
     [0, 2],
@@ -1365,6 +1391,59 @@ impl Block {
             writer.write_vec(&huffman_ac[0x00])?;
         }
         return Ok(());
+    }
+
+    pub fn get_encoded_size(&self, is_luma: bool) -> usize {
+        let mut result = 0usize;
+
+        let huffman_dc = if is_luma {
+            &HUFFMAN_SIZE_DC_LUMA
+        } else {
+            &HUFFMAN_SIZE_DC_CHROMA
+        };
+        let huffman_ac = if is_luma {
+            &HUFFMAN_SIZE_AC_LUMA
+        } else {
+            &HUFFMAN_SIZE_AC_CHROMA
+        };
+
+        let mut temp = [0i16; 8 * 8];
+        // Unwrap
+        for (d, uwi) in temp.iter_mut().zip(UNWRAP_PATTERN) {
+            *d = self.0[uwi] as i16;
+        }
+
+        let dc = temp[0];
+        result += &huffman_dc[Block::int_width(dc)];
+        result += Block::int_width(dc);
+        let mut zeroes = 0;
+        let mut tail = 0;
+        for i in 0..8 * 8 {
+            if temp[63 - i] != 0 {
+                break;
+            }
+            tail += 1;
+        }
+        for i in 1..64 - tail {
+            let item = temp[i];
+            if item == 0 {
+                zeroes += 1;
+                if zeroes == 16 {
+                    result += &huffman_ac[0xF0];
+                    zeroes = 0;
+                }
+            } else {
+                let item_width = Block::int_width(item);
+                let head = (zeroes as u8) << 4 | item_width as u8;
+                result += &huffman_ac[head as usize];
+                result += item_width;
+                zeroes = 0;
+            }
+        }
+        if tail > 0 {
+            result += &huffman_ac[0x00];
+        }
+        return result;
     }
 
     pub fn decode2(&mut self, reader: &mut BitReader, is_luma: bool, quality: f64) -> Result<()> {

@@ -463,5 +463,26 @@ def gen_encoder(codelist, max=-1):
         print("[{}],".format(", ".join(item)))
 
 
+def gen_encoder_size(codelist, max=-1):
+    count = 0
+    if max > 0:
+        count = max
+    else:
+        for item in codelist:
+            if item[1] > count:
+                count = item[1]
+        count += 1
+    print(count)
+
+    sorted = [0] * count
+
+    for item in codelist:
+        sorted[item[1]] = len(item[0])
+    # print(sorted)
+
+    print(", ".join([str(a) for a in sorted]))
+
+
 # gen_encoder(codes_ac_chroma, max=256)
-gen_decoder(codes_ac_chroma)
+# gen_decoder(codes_ac_chroma)
+gen_encoder_size(codes_ac_chroma, 256)
