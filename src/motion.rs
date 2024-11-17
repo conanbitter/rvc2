@@ -6,10 +6,11 @@ use crate::{
     videocode::{MacroBlock, VideoFrame},
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BlockType {
     New,
     Motion(i32, i32),
+    Repeat(u32),
 }
 
 pub struct MotionMap {
@@ -145,5 +146,42 @@ impl MotionMap {
             }
         }
         print!("total: {}", total);
+    }
+}
+
+impl From<BlockType> for u8 {
+    fn from(value: BlockType) -> Self {
+        match value {
+            BlockType::New => 255,
+            BlockType::Motion(x, y) => {
+                let x = x + 7;
+                let y = y + 7;
+                (((x & 0b1111) << 4) | (y & 0b1111)) as u8
+            }
+            BlockType::Repeat(r) => {
+                if r <= 16 {
+                    (0b11110000 | (r - 2)) as u8
+                } else {
+                    (((r - 17) << 4) | 0b1111) as u8
+                }
+            }
+        }
+    }
+}
+
+impl From<u8> for BlockType {
+    fn from(value: u8) -> Self {
+        let x = (value >> 4) as i32 - 7;
+        let y = (value & 0b1111) as i32 - 7;
+        if x == 8 && y == 8 {
+            return BlockType::New;
+        }
+        if x == 8 {
+            return BlockType::Repeat((y + 9) as u32);
+        }
+        if y == 8 {
+            return BlockType::Repeat((x + 24) as u32);
+        }
+        return BlockType::Motion(x, y);
     }
 }
