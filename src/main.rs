@@ -20,7 +20,7 @@ use blocks::{Block, QMatrices};
 use humansize::{format_size, BINARY};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
-use motion::{BlockType, MotionMap};
+use motion::{block_stat, BlockType, MotionMap};
 use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
@@ -119,8 +119,8 @@ fn unpack_plane(plane: &mut Plane, reader: &mut BitReader, is_luma: bool, qualit
     return Ok(());
 }
 
-const FILE_A: &str = "0690.png";
-const FILE_B: &str = "0693.png";
+const FILE_A: &str = "1492.tif";
+const FILE_B: &str = "1495.tif";
 const FILE_RES: &str = "0693_motion.png";
 fn main() -> Result<()> {
     /*let mut test_block = Block([
@@ -360,11 +360,57 @@ fn main() -> Result<()> {
         }
     }*/
 
-    let mut output = Vec::<u8>::new();
-    let mut writer = BitWriter::new(&mut output);
+    let mut stat_zero = Vec::<(f64, f64)>::new();
+    let mut stat_new = Vec::<(f64, f64)>::new();
+
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            let dst_x = mx * 16;
+            let dst_y = my * 16;
+            let mv_index = (mx + my * mv_width) as usize;
+
+            //frame_b.extract_macroblock(dst_x, dst_y, &mut macroblock);
+            //frame_a.extract_macroblock(dst_x, dst_y, &mut macroblock2);
+
+            if let BlockType::Motion(vx, vy) = motion.vectors[mv_index] {
+                if vx == 0 && vy == 0 {
+                    stat_zero.push(block_stat(
+                        &frame_a.y_plane,
+                        dst_x,
+                        dst_y,
+                        &frame_b.y_plane,
+                        dst_x,
+                        dst_y,
+                    ));
+                }
+            } else {
+                stat_new.push(block_stat(
+                    &frame_a.y_plane,
+                    dst_x,
+                    dst_y,
+                    &frame_b.y_plane,
+                    dst_x,
+                    dst_y,
+                ));
+            }
+        }
+    }
+
+    println!("\nNEW");
+    for (diff, diff_sq) in stat_new {
+        println!("{};{}", diff, diff_sq);
+    }
+    println!("\nZERO");
+    for (diff, diff_sq) in stat_zero {
+        println!("{};{}", diff, diff_sq);
+    }
+
+    return Ok(());
 
     let mut macroblock = MacroBlock::new();
     let mut macroblock2 = MacroBlock::new();
+    let mut output = Vec::<u8>::new();
+    let mut writer = BitWriter::new(&mut output);
 
     for my in 0..mv_height {
         for mx in 0..mv_width {

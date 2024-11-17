@@ -36,6 +36,28 @@ fn block_diff(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
     return accum;
 }
 
+pub fn block_stat(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> (f64, f64) {
+    let mut accum = 0f64;
+    let mut accum_sq = 0f64;
+    for y in 0..16 {
+        let astart = (ax + (ay + y) * a.width()) as usize;
+        let bstart = (bx + (by + y) * b.width()) as usize;
+        let aline = &a.data[astart..astart + 16];
+        let bline = &b.data[bstart..bstart + 16];
+        accum += aline
+            .iter()
+            .zip(bline.iter())
+            .map(|(a, b)| (*a - *b).abs())
+            .sum::<f64>();
+        accum_sq += aline
+            .iter()
+            .zip(bline.iter())
+            .map(|(a, b)| (*a - *b) * (*a - *b))
+            .sum::<f64>();
+    }
+    return (accum, accum_sq);
+}
+
 fn block_diff_ult(a: &VideoFrame, ax: u32, ay: u32, b: &VideoFrame, bx: u32, by: u32, qmatrices: &QMatrices) -> usize {
     let mut block_a = MacroBlock::new();
     let mut block_b = MacroBlock::new();
