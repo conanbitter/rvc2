@@ -18,7 +18,8 @@ pub struct MotionMap {
     pub height: u32,
 }
 
-const ZMP_TRESHOLD: f64 = 512.0 * 4.0;
+const ZMP_TRESHOLD: f64 = 512.0;
+const NEW_TRESHOLD: f64 = 4096.0;
 
 fn block_diff(a: &Plane, ax: u32, ay: u32, b: &Plane, bx: u32, by: u32) -> f64 {
     let mut accum = 0f64;
@@ -88,7 +89,7 @@ impl MotionMap {
 
                 let mut vect = (0i32, 0i32);
                 let mut min_d = block_diff(&cur_frame.y_plane, dst_x, dst_y, &prev_frame.y_plane, dst_x, dst_y);
-                if min_d > ZMP_TRESHOLD / 4.0 {
+                if min_d > ZMP_TRESHOLD {
                     for by in max(dst_y as i32 - 7, 0)..=min(dst_y as i32 + 7, prev_frame.height as i32 - 1 - 16) {
                         for bx in max(dst_x as i32 - 7, 0)..=min(dst_x as i32 + 7, prev_frame.width as i32 - 1 - 16) {
                             let new_d = block_diff(
@@ -105,7 +106,7 @@ impl MotionMap {
                             }
                         }
                     }
-                    if min_d > ZMP_TRESHOLD {
+                    if min_d > NEW_TRESHOLD {
                         self.vectors[mv_index] = BlockType::New;
                     } else {
                         self.vectors[mv_index] = BlockType::Motion(vect.0, vect.1);
