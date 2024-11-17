@@ -119,6 +119,14 @@ impl MacroBlock {
         }
     }
 
+    pub fn average(&mut self, other: &MacroBlock) {
+        for (block, other_block) in self.0.iter_mut().zip(other.0.iter()) {
+            for (d, other_d) in block.0.iter_mut().zip(other_block.0.iter()) {
+                *d = (*d + other_d) / 2.0;
+            }
+        }
+    }
+
     pub fn encode(&mut self, qmatrices: &QMatrices) {
         self.0[0].encode3(&qmatrices.luma);
         self.0[1].encode3(&qmatrices.luma);
