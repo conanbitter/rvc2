@@ -1,4 +1,7 @@
 use std::cmp::{max, min};
+use std::io::{Read, Write};
+
+use anyhow::Result;
 
 use crate::{
     blocks::QMatrices,
@@ -146,6 +149,58 @@ impl MotionMap {
             }
         }
         print!("total: {}", total);
+    }
+
+    pub fn write(&self, writer: &mut dyn Write) -> Result<()> {
+        let mut last = BlockType::Repeat(0);
+        let mut repeats = 0u32;
+        let mut data = [0u8; 1];
+        for vector in &self.vectors {
+            if *vector == last && repeats < 31 {
+                repeats += 1;
+            } else {
+                if repeats == 1 {
+                    data[0] = last.into();
+                    writer.write_all(&data)?;
+                } else if repeats > 1 {
+                    data[0] = BlockType::Repeat(repeats).into();
+                    writer.write_all(&data)?;
+                }
+                repeats = 0;
+                last = *vector;
+                data[0] = (*vector).into();
+                writer.write_all(&data)?;
+            }
+        }
+        if repeats == 1 {
+            data[0] = last.into();
+            writer.write_all(&data)?;
+        } else if repeats > 1 {
+            data[0] = BlockType::Repeat(repeats).into();
+            writer.write_all(&data)?;
+        }
+        return Ok(());
+    }
+
+    pub fn read(&mut self, reader: &mut dyn Read) -> Result<()> {
+        let mut index = 0usize;
+        let mut last = BlockType::Repeat(0);
+        let mut data = [0u8; 1];
+        while index <= self.vectors.len() {
+            reader.read_exact(&mut data)?;
+            let cur: BlockType = data[0].into();
+            if let BlockType::Repeat(repeats) = cur {
+                for _ in [0..repeats] {
+                    self.vectors[index] = last;
+                    index += 1;
+                }
+            } else {
+                last = cur;
+                self.vectors[index] = cur;
+                index += 1;
+            }
+        }
+        return Ok(());
     }
 }
 
