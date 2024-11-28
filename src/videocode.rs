@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{io::Write, path::Path};
 
 use anyhow::Result;
 use image::{ImageBuffer, ImageReader, Rgb};
@@ -7,8 +7,16 @@ use crate::{
     bitio::{BitReader, BitWriter},
     blocks::{Block, QMatrices},
     colors::{rgb2yuv, yuv2rgb},
+    motion::{BlockType, MotionMap},
     planes::Plane,
 };
+
+#[repr(u8)]
+enum FrameType {
+    IFrame,
+    PFrame,
+    BFrame,
+}
 
 pub struct VideoFrame {
     pub y_plane: Plane,
@@ -22,6 +30,11 @@ pub struct VideoFrame {
 }
 
 pub struct MacroBlock(pub [Block; 4 + 1 + 1]);
+
+pub struct Encoder {
+    buffer: Vec<u8>,
+    data: [u8; 1],
+}
 
 impl VideoFrame {
     pub fn new(width: u32, height: u32) -> VideoFrame {
@@ -171,6 +184,168 @@ impl MacroBlock {
         self.0[3].read(reader, true)?;
         self.0[4].read(reader, false)?;
         self.0[5].read(reader, false)?;
+        return Ok(());
+    }
+}
+
+impl Encoder {
+    pub fn new() -> Encoder {
+        return Encoder {
+            buffer: Vec::<u8>::new(),
+            data: [0u8; 1],
+        };
+    }
+
+    pub fn encode_i_frame(&mut self, frame: &VideoFrame, file: &mut dyn Write, qmatrices: &QMatrices) -> Result<()> {
+        self.data[0] = FrameType::IFrame as u8;
+        file.write_all(&self.data)?;
+
+        self.buffer.clear();
+        let mut writer = BitWriter::new(&mut self.buffer);
+        let mv_width = frame.width / 16;
+        let mv_height = frame.height / 16;
+        let mut mblock = MacroBlock::new();
+
+        for my in 0..mv_height {
+            for mx in 0..mv_width {
+                frame.extract_macroblock(mx * 16, my * 16, &mut mblock);
+                mblock.encode(qmatrices);
+                mblock.write(&mut writer)?;
+            }
+        }
+        writer.flush()?;
+        let dct_size = self.buffer.len() as u32;
+        file.write_all(&dct_size.to_ne_bytes())?;
+        file.write_all(&self.buffer)?;
+        return Ok(());
+    }
+
+    pub fn encode_p_frame(
+        &mut self,
+        frame: &VideoFrame,
+        prev_frame: &VideoFrame,
+        file: &mut dyn Write,
+        qmatrices: &QMatrices,
+    ) -> Result<()> {
+        self.data[0] = FrameType::PFrame as u8;
+        file.write_all(&self.data)?;
+
+        let mut motion = MotionMap::new(&frame);
+        motion.calculate(&frame, &prev_frame);
+        self.buffer.clear();
+        motion.write(&mut self.buffer)?;
+        let motion_size = self.buffer.len() as u32;
+        file.write_all(&motion_size.to_ne_bytes())?;
+        file.write_all(&self.buffer)?;
+
+        self.buffer.clear();
+        let mut writer = BitWriter::new(&mut self.buffer);
+        let mv_width = frame.width / 16;
+        let mv_height = frame.height / 16;
+        let mut mblock1 = MacroBlock::new();
+        let mut mblock2 = MacroBlock::new();
+
+        for my in 0..mv_height {
+            for mx in 0..mv_width {
+                let dst_x = mx * 16;
+                let dst_y = my * 16;
+                let mv_index = (mx + my * mv_width) as usize;
+
+                frame.extract_macroblock(dst_x, dst_y, &mut mblock1);
+
+                if let BlockType::Motion(vx, vy) = motion.vectors[mv_index] {
+                    prev_frame.extract_macroblock((dst_x as i32 + vx) as u32, (dst_y as i32 + vy) as u32, &mut mblock2);
+                    mblock1.difference(&mblock2);
+                }
+
+                mblock1.encode(qmatrices);
+                mblock1.write(&mut writer)?;
+            }
+        }
+        writer.flush()?;
+        let dct_size = self.buffer.len() as u32;
+        file.write_all(&dct_size.to_ne_bytes())?;
+        file.write_all(&self.buffer)?;
+        return Ok(());
+    }
+
+    pub fn encode_b_frame(
+        &mut self,
+        frame: &VideoFrame,
+        prev_frame: &VideoFrame,
+        next_frame: &VideoFrame,
+        file: &mut dyn Write,
+        qmatrices: &QMatrices,
+    ) -> Result<()> {
+        self.data[0] = FrameType::PFrame as u8;
+        file.write_all(&self.data)?;
+
+        let mut motion_prev = MotionMap::new(&frame);
+        motion_prev.calculate(&frame, &prev_frame);
+        self.buffer.clear();
+        motion_prev.write(&mut self.buffer)?;
+        let motion_size = self.buffer.len() as u32;
+        file.write_all(&motion_size.to_ne_bytes())?;
+        file.write_all(&self.buffer)?;
+
+        let mut motion_next = MotionMap::new(&frame);
+        motion_next.calculate(&frame, &next_frame);
+        self.buffer.clear();
+        motion_prev.write(&mut self.buffer)?;
+        let motion_size = self.buffer.len() as u32;
+        file.write_all(&motion_size.to_ne_bytes())?;
+        file.write_all(&self.buffer)?;
+
+        self.buffer.clear();
+        let mut writer = BitWriter::new(&mut self.buffer);
+        let mv_width = frame.width / 16;
+        let mv_height = frame.height / 16;
+        let mut mblock1 = MacroBlock::new();
+        let mut mblock2 = MacroBlock::new();
+        let mut mblock3 = MacroBlock::new();
+
+        for my in 0..mv_height {
+            for mx in 0..mv_width {
+                let dst_x = mx * 16;
+                let dst_y = my * 16;
+                let mv_index = (mx + my * mv_width) as usize;
+
+                frame.extract_macroblock(dst_x, dst_y, &mut mblock1);
+
+                if let BlockType::Motion(pvx, pvy) = motion_prev.vectors[mv_index] {
+                    prev_frame.extract_macroblock(
+                        (dst_x as i32 + pvx) as u32,
+                        (dst_y as i32 + pvy) as u32,
+                        &mut mblock2,
+                    );
+
+                    if let BlockType::Motion(nvx, nvy) = motion_prev.vectors[mv_index] {
+                        next_frame.extract_macroblock(
+                            (dst_x as i32 + nvx) as u32,
+                            (dst_y as i32 + nvy) as u32,
+                            &mut mblock3,
+                        );
+                        mblock2.average(&mblock3);
+                    }
+
+                    mblock1.difference(&mblock2);
+                } else if let BlockType::Motion(nvx, nvy) = motion_prev.vectors[mv_index] {
+                    next_frame.extract_macroblock(
+                        (dst_x as i32 + nvx) as u32,
+                        (dst_y as i32 + nvy) as u32,
+                        &mut mblock3,
+                    );
+                    mblock1.difference(&mblock3);
+                }
+
+                mblock1.encode(qmatrices);
+                mblock1.write(&mut writer)?;
+            }
+        }
+        writer.flush()?;
+        let dct_size = self.buffer.len() as u32;
+        file.write_all(&dct_size.to_ne_bytes())?;
+        file.write_all(&self.buffer)?;
         return Ok(());
     }
 }
