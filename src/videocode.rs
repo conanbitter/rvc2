@@ -32,7 +32,9 @@ pub struct VideoFrame {
 pub struct MacroBlock(pub [Block; 4 + 1 + 1]);
 
 pub struct Encoder {
-    buffer: Vec<u8>,
+    buffer_dct: Vec<u8>,
+    buffer_mprev: Vec<u8>,
+    buffer_mnext: Vec<u8>,
     data: [u8; 1],
 }
 
@@ -191,17 +193,15 @@ impl MacroBlock {
 impl Encoder {
     pub fn new() -> Encoder {
         return Encoder {
-            buffer: Vec::<u8>::new(),
+            buffer_dct: Vec::<u8>::new(),
+            buffer_mprev: Vec::<u8>::new(),
+            buffer_mnext: Vec::<u8>::new(),
             data: [0u8; 1],
         };
     }
 
     pub fn encode_i_frame(&mut self, frame: &VideoFrame, file: &mut dyn Write, qmatrices: &QMatrices) -> Result<()> {
-        self.data[0] = FrameType::IFrame as u8;
-        file.write_all(&self.data)?;
-
-        self.buffer.clear();
-        let mut writer = BitWriter::new(&mut self.buffer);
+        let mut writer = BitWriter::new(&mut self.buffer_dct);
         let mv_width = frame.width / 16;
         let mv_height = frame.height / 16;
         let mut mblock = MacroBlock::new();
@@ -214,9 +214,18 @@ impl Encoder {
             }
         }
         writer.flush()?;
-        let dct_size = self.buffer.len() as u32;
+
+        let dct_size = self.buffer_dct.len() as u32;
+        let frame_size = 1 + dct_size; // frame_type+dct
+
+        file.write_all(&frame_size.to_ne_bytes())?;
+        self.data[0] = FrameType::IFrame as u8;
+        file.write_all(&self.data)?;
+
         file.write_all(&dct_size.to_ne_bytes())?;
-        file.write_all(&self.buffer)?;
+        file.write_all(&self.buffer_dct)?;
+
+        self.buffer_dct.clear();
         return Ok(());
     }
 
@@ -227,19 +236,11 @@ impl Encoder {
         file: &mut dyn Write,
         qmatrices: &QMatrices,
     ) -> Result<()> {
-        self.data[0] = FrameType::PFrame as u8;
-        file.write_all(&self.data)?;
-
         let mut motion = MotionMap::new(&frame);
         motion.calculate(&frame, &prev_frame);
-        self.buffer.clear();
-        motion.write(&mut self.buffer)?;
-        let motion_size = self.buffer.len() as u32;
-        file.write_all(&motion_size.to_ne_bytes())?;
-        file.write_all(&self.buffer)?;
+        motion.write(&mut self.buffer_mprev)?;
 
-        self.buffer.clear();
-        let mut writer = BitWriter::new(&mut self.buffer);
+        let mut writer = BitWriter::new(&mut self.buffer_dct);
         let mv_width = frame.width / 16;
         let mv_height = frame.height / 16;
         let mut mblock1 = MacroBlock::new();
@@ -263,9 +264,21 @@ impl Encoder {
             }
         }
         writer.flush()?;
-        let dct_size = self.buffer.len() as u32;
+
+        let dct_size = self.buffer_dct.len() as u32;
+        let motion_size = self.buffer_mprev.len() as u32;
+        let frame_size = 1 + motion_size + dct_size; // frame_type+mprev+dct
+
+        file.write_all(&frame_size.to_ne_bytes())?;
+        self.data[0] = FrameType::PFrame as u8;
+        file.write_all(&self.data)?;
+        file.write_all(&motion_size.to_ne_bytes())?;
+        file.write_all(&self.buffer_mprev)?;
         file.write_all(&dct_size.to_ne_bytes())?;
-        file.write_all(&self.buffer)?;
+        file.write_all(&self.buffer_dct)?;
+
+        self.buffer_dct.clear();
+        self.buffer_mprev.clear();
         return Ok(());
     }
 
@@ -277,27 +290,15 @@ impl Encoder {
         file: &mut dyn Write,
         qmatrices: &QMatrices,
     ) -> Result<()> {
-        self.data[0] = FrameType::PFrame as u8;
-        file.write_all(&self.data)?;
-
         let mut motion_prev = MotionMap::new(&frame);
         motion_prev.calculate(&frame, &prev_frame);
-        self.buffer.clear();
-        motion_prev.write(&mut self.buffer)?;
-        let motion_size = self.buffer.len() as u32;
-        file.write_all(&motion_size.to_ne_bytes())?;
-        file.write_all(&self.buffer)?;
+        motion_prev.write(&mut self.buffer_mprev)?;
 
         let mut motion_next = MotionMap::new(&frame);
         motion_next.calculate(&frame, &next_frame);
-        self.buffer.clear();
-        motion_prev.write(&mut self.buffer)?;
-        let motion_size = self.buffer.len() as u32;
-        file.write_all(&motion_size.to_ne_bytes())?;
-        file.write_all(&self.buffer)?;
+        motion_prev.write(&mut self.buffer_mnext)?;
 
-        self.buffer.clear();
-        let mut writer = BitWriter::new(&mut self.buffer);
+        let mut writer = BitWriter::new(&mut self.buffer_dct);
         let mv_width = frame.width / 16;
         let mv_height = frame.height / 16;
         let mut mblock1 = MacroBlock::new();
@@ -343,9 +344,25 @@ impl Encoder {
             }
         }
         writer.flush()?;
-        let dct_size = self.buffer.len() as u32;
+
+        let dct_size = self.buffer_dct.len() as u32;
+        let mprev_size = self.buffer_mprev.len() as u32;
+        let mnext_size = self.buffer_mnext.len() as u32;
+        let frame_size = 1 + mprev_size + mnext_size + dct_size; // frame_type+mprev+mnext+dct
+
+        file.write_all(&frame_size.to_ne_bytes())?;
+        self.data[0] = FrameType::PFrame as u8;
+        file.write_all(&self.data)?;
+        file.write_all(&mprev_size.to_ne_bytes())?;
+        file.write_all(&self.buffer_mprev)?;
+        file.write_all(&mnext_size.to_ne_bytes())?;
+        file.write_all(&self.buffer_mnext)?;
         file.write_all(&dct_size.to_ne_bytes())?;
-        file.write_all(&self.buffer)?;
+        file.write_all(&self.buffer_dct)?;
+
+        self.buffer_dct.clear();
+        self.buffer_mprev.clear();
+        self.buffer_mnext.clear();
         return Ok(());
     }
 }
