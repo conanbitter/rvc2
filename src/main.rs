@@ -2,6 +2,7 @@ use core::f64;
 use std::{
     cmp::{max, min},
     f64::consts::PI,
+    fs::File,
     io::Write,
     path::{Path, PathBuf},
     time::Instant,
@@ -130,12 +131,33 @@ struct Args {
     files: Vec<PathBuf>,
     #[arg(short, long)]
     output: PathBuf,
+    #[arg(short, long)]
+    fps: f32,
 }
+
+const MAGIC: [u8; 5] = [b'N', b'R', b'V', b'C', 1];
 
 fn main() -> Result<()> {
     let args = Args::parse_from(wild::args());
 
-    println!("{:?}", args);
+    //println!("{:?}", args);
+    let (image_width, image_height) = ImageReader::open(&args.files[0])?.into_dimensions()?;
+
+    let mut file = File::create(args.output)?;
+    // header
+    file.write_all(&MAGIC)?;
+    let header_imwidth = image_width as u16;
+    let header_imheight = image_height as u16;
+    let header_count = args.files.len() as u32;
+    file.write_all(&header_imwidth.to_ne_bytes())?;
+    file.write_all(&header_imheight.to_ne_bytes())?;
+    file.write_all(&args.fps.to_ne_bytes())?;
+    file.write_all(&header_count.to_ne_bytes())?;
+
+    // metadata
+    let metadata_size = 0u32;
+    file.write_all(&metadata_size.to_ne_bytes())?;
+
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
