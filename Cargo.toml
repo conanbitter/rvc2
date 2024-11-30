@@ -5,9 +5,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.89"
+clap = { version = "4.5.21", features = ["derive"] }
 humansize = "2.1.3"
 image = "0.25.2"
 imageproc = "0.25.0"
 ndarray = "0.16.1"
 ndarray-stats = "0.6.0"
 once_cell = "1.19.0"
+wild = "2.2.1"

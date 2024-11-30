@@ -1,0 +1,1 @@
+cargo run -- -o "data/result.nrv" "data/vid/test7/*.tif"

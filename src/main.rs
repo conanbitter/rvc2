@@ -3,7 +3,7 @@ use std::{
     cmp::{max, min},
     f64::consts::PI,
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     time::Instant,
 };
 
@@ -17,6 +17,7 @@ mod videocode;
 use anyhow::Result;
 use bitio::{BitReader, BitWriter};
 use blocks::{Block, QMatrices};
+use clap::Parser;
 use humansize::{format_size, BINARY};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
@@ -122,7 +123,19 @@ fn unpack_plane(plane: &mut Plane, reader: &mut BitReader, is_luma: bool, qualit
 const FILE_A: &str = "1492.tif";
 const FILE_B: &str = "1495.tif";
 const FILE_RES: &str = "0693_motion.png";
+
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(required = true)]
+    files: Vec<PathBuf>,
+    #[arg(short, long)]
+    output: PathBuf,
+}
+
 fn main() -> Result<()> {
+    let args = Args::parse_from(wild::args());
+
+    println!("{:?}", args);
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
@@ -324,7 +337,7 @@ fn main() -> Result<()> {
     }
 
     frame_b.save_to_image("data/076_1.png")?;*/
-    let (image_width, image_height) = ImageReader::open(format!("data/{}", FILE_A))?.into_dimensions()?;
+    /*let (image_width, image_height) = ImageReader::open(format!("data/{}", FILE_A))?.into_dimensions()?;
 
     let mut frame_a = VideoFrame::new(image_width, image_height);
     let mut frame_b = VideoFrame::new(image_width, image_height);
@@ -459,5 +472,7 @@ fn main() -> Result<()> {
     }
 
     frame.save_to_image("data/test6_readed.png")?;*/
+    */
+
     Ok(())
 }
