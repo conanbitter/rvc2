@@ -27,7 +27,7 @@ use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
 use planes::Plane;
-use videocode::{MacroBlock, VideoFrame};
+use videocode::{Encoder, MacroBlock, VideoFrame};
 
 /*
 fn calc_dct(src: &[f64], dst: &mut [f64]) {
@@ -136,9 +136,11 @@ struct Args {
 }
 
 const MAGIC: [u8; 5] = [b'N', b'R', b'V', b'C', 1];
+const MAX_P_FRAMES: usize = 10;
 
 fn main() -> Result<()> {
     let args = Args::parse_from(wild::args());
+    let qmatrices = QMatrices::new(0.95);
 
     //println!("{:?}", args);
     let (image_width, image_height) = ImageReader::open(&args.files[0])?.into_dimensions()?;
@@ -158,6 +160,48 @@ fn main() -> Result<()> {
     let metadata_size = 0u32;
     file.write_all(&metadata_size.to_ne_bytes())?;
 
+    // frames
+    let mut prev_support = VideoFrame::new(image_width, image_height);
+    let mut next_support = VideoFrame::new(image_width, image_height);
+    let mut current_frame = VideoFrame::new(image_width, image_height);
+    let mut coder = Encoder::new();
+    let mut prev_support_id = 0usize;
+    prev_support.load_from_image(&args.files[prev_support_id])?;
+    coder.encode_i_frame(&prev_support, &mut file, &qmatrices)?;
+    let mut next_support_id;
+    let mut p_count = 0;
+    let mut progress = 1;
+    loop {
+        if prev_support_id == args.files.len() - 1 {
+            break;
+        }
+
+        println!("{}/{}", progress, args.files.len());
+        progress += 1;
+
+        next_support_id = min(prev_support_id + 3, args.files.len() - 1);
+        next_support.load_from_image(&args.files[next_support_id])?;
+        if p_count < MAX_P_FRAMES {
+            coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
+            p_count += 1;
+        } else {
+            coder.encode_i_frame(&next_support, &mut file, &qmatrices)?;
+            p_count = 0;
+        }
+
+        if prev_support_id + 1 < next_support_id {
+            current_frame.load_from_image(&args.files[prev_support_id + 1])?;
+            coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+            progress += 1;
+        }
+        if prev_support_id + 2 < next_support_id {
+            current_frame.load_from_image(&args.files[prev_support_id + 1])?;
+            coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+            progress += 1;
+        }
+        prev_support_id = next_support_id;
+        prev_support = next_support.clone();
+    }
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
@@ -496,5 +540,5 @@ fn main() -> Result<()> {
     frame.save_to_image("data/test6_readed.png")?;*/
     */
 
-    Ok(())
+    return Ok(());
 }

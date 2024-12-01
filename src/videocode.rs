@@ -18,6 +18,7 @@ enum FrameType {
     BFrame,
 }
 
+#[derive(Clone)]
 pub struct VideoFrame {
     pub y_plane: Plane,
     pub u_plane: Plane,
@@ -270,7 +271,7 @@ impl Encoder {
         let frame_size = 1 + motion_size + dct_size; // frame_type+mprev+dct
 
         file.write_all(&frame_size.to_ne_bytes())?;
-        self.data[0] = FrameType::PFrame as u8;
+        self.data[0] = FrameType::BFrame as u8;
         file.write_all(&self.data)?;
         file.write_all(&motion_size.to_ne_bytes())?;
         file.write_all(&self.buffer_mprev)?;

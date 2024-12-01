@@ -1,1 +1,1 @@
-cargo run -- -o "data/result.nrv" --fps 30 "data/vid/test7/*.tif"
+cargo run --release -- -o "data/result.nrv" --fps 30 "data/vid/test7/*.tif"

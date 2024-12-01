@@ -5,6 +5,7 @@ use image::{GrayImage, ImageReader, Luma, Rgb, RgbImage};
 
 use crate::blocks::Block;
 
+#[derive(Clone)]
 pub struct Plane {
     pub data: Vec<f64>,
     width: u32,
