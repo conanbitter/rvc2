@@ -136,6 +136,8 @@ struct Args {
     fps: f32,
     #[arg(long)]
     nomotion: bool,
+    #[arg(short, long, default_value = "0.95")]
+    quality: f64,
 }
 
 const MAGIC: [u8; 5] = [b'N', b'R', b'V', b'C', 1];
@@ -143,7 +145,8 @@ const MAX_P_FRAMES: usize = 10;
 
 fn main() -> Result<()> {
     let args = Args::parse_from(wild::args());
-    let qmatrices = QMatrices::new(0.95);
+    let quality = args.quality.clamp(0.0, 1.0);
+    let qmatrices = QMatrices::new(quality);
 
     //println!("{:?}", args);
     let (image_width, image_height) = ImageReader::open(&args.files[0])?.into_dimensions()?;
