@@ -134,6 +134,8 @@ struct Args {
     output: PathBuf,
     #[arg(short, long)]
     fps: f32,
+    #[arg(long)]
+    nomotion: bool,
 }
 
 const MAGIC: [u8; 5] = [b'N', b'R', b'V', b'C', 1];
@@ -167,46 +169,55 @@ fn main() -> Result<()> {
 
     // frames
     let mut progress = tqdm!(total = args.files.len(), inverse_unit = true);
-
-    let mut prev_support = VideoFrame::new(image_width, image_height);
-    let mut next_support = VideoFrame::new(image_width, image_height);
-    let mut current_frame = VideoFrame::new(image_width, image_height);
     let mut coder = Encoder::new();
-    let mut prev_support_id = 0usize;
-    prev_support.load_from_image(&args.files[prev_support_id])?;
-    coder.encode_i_frame(&prev_support, &mut file, &qmatrices)?;
-    progress.update(1)?;
-    let mut next_support_id;
-    let mut p_count = 0;
 
-    loop {
-        next_support_id = min(prev_support_id + 3, args.files.len() - 1);
-        if prev_support_id == next_support_id {
-            break;
+    if args.nomotion {
+        let mut frame = VideoFrame::new(image_width, image_height);
+        for filename in args.files {
+            frame.load_from_image(filename)?;
+            coder.encode_i_frame(&frame, &mut file, &qmatrices)?;
+            progress.update(1)?;
         }
-        next_support.load_from_image(&args.files[next_support_id])?;
-        if p_count < MAX_P_FRAMES {
-            coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
-            p_count += 1;
-        } else {
-            coder.encode_i_frame(&next_support, &mut file, &qmatrices)?;
-            p_count = 0;
-        }
-
+    } else {
+        let mut prev_support = VideoFrame::new(image_width, image_height);
+        let mut next_support = VideoFrame::new(image_width, image_height);
+        let mut current_frame = VideoFrame::new(image_width, image_height);
+        let mut prev_support_id = 0usize;
+        prev_support.load_from_image(&args.files[prev_support_id])?;
+        coder.encode_i_frame(&prev_support, &mut file, &qmatrices)?;
         progress.update(1)?;
+        let mut next_support_id;
+        let mut p_count = 0;
 
-        if prev_support_id + 1 < next_support_id {
-            current_frame.load_from_image(&args.files[prev_support_id + 1])?;
-            coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+        loop {
+            next_support_id = min(prev_support_id + 3, args.files.len() - 1);
+            if prev_support_id == next_support_id {
+                break;
+            }
+            next_support.load_from_image(&args.files[next_support_id])?;
+            if p_count < MAX_P_FRAMES {
+                coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
+                p_count += 1;
+            } else {
+                coder.encode_i_frame(&next_support, &mut file, &qmatrices)?;
+                p_count = 0;
+            }
+
             progress.update(1)?;
+
+            if prev_support_id + 1 < next_support_id {
+                current_frame.load_from_image(&args.files[prev_support_id + 1])?;
+                coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+                progress.update(1)?;
+            }
+            if prev_support_id + 2 < next_support_id {
+                current_frame.load_from_image(&args.files[prev_support_id + 1])?;
+                coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+                progress.update(1)?;
+            }
+            prev_support_id = next_support_id;
+            prev_support = next_support.clone();
         }
-        if prev_support_id + 2 < next_support_id {
-            current_frame.load_from_image(&args.files[prev_support_id + 1])?;
-            coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
-            progress.update(1)?;
-        }
-        prev_support_id = next_support_id;
-        prev_support = next_support.clone();
     }
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
