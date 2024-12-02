@@ -1,4 +1,4 @@
-use std::{f64::consts::PI, fmt};
+use std::{f64::consts::PI, fmt, io::Write};
 
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -1580,5 +1580,15 @@ impl QMatrices {
             *dest = 2.0 * (src - 1.0) * quality_k + 1.0;
         }
         return result;
+    }
+
+    pub fn write(&self, file: &mut dyn Write) -> Result<()> {
+        for item in self.luma {
+            file.write_all(&item.to_ne_bytes())?;
+        }
+        for item in self.chroma {
+            file.write_all(&item.to_ne_bytes())?;
+        }
+        return Ok(());
     }
 }

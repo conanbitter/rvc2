@@ -22,6 +22,7 @@ use clap::Parser;
 use humansize::{format_size, BINARY};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
 use imageproc::drawing::BresenhamLineIter;
+use kdam::{tqdm, BarExt};
 use motion::{block_stat, BlockType, MotionMap};
 use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
@@ -160,7 +161,13 @@ fn main() -> Result<()> {
     let metadata_size = 0u32;
     file.write_all(&metadata_size.to_ne_bytes())?;
 
+    // qmatrices
+    qmatrices.write(&mut file)?;
+    qmatrices.write(&mut file)?; // for now both matrices are the same
+
     // frames
+    let mut progress = tqdm!(total = args.files.len(), inverse_unit = true);
+
     let mut prev_support = VideoFrame::new(image_width, image_height);
     let mut next_support = VideoFrame::new(image_width, image_height);
     let mut current_frame = VideoFrame::new(image_width, image_height);
@@ -168,18 +175,15 @@ fn main() -> Result<()> {
     let mut prev_support_id = 0usize;
     prev_support.load_from_image(&args.files[prev_support_id])?;
     coder.encode_i_frame(&prev_support, &mut file, &qmatrices)?;
+    progress.update(1)?;
     let mut next_support_id;
     let mut p_count = 0;
-    let mut progress = 1;
+
     loop {
-        if prev_support_id == args.files.len() - 1 {
+        next_support_id = min(prev_support_id + 3, args.files.len() - 1);
+        if prev_support_id == next_support_id {
             break;
         }
-
-        println!("{}/{}", progress, args.files.len());
-        progress += 1;
-
-        next_support_id = min(prev_support_id + 3, args.files.len() - 1);
         next_support.load_from_image(&args.files[next_support_id])?;
         if p_count < MAX_P_FRAMES {
             coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
@@ -189,15 +193,17 @@ fn main() -> Result<()> {
             p_count = 0;
         }
 
+        progress.update(1)?;
+
         if prev_support_id + 1 < next_support_id {
             current_frame.load_from_image(&args.files[prev_support_id + 1])?;
             coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
-            progress += 1;
+            progress.update(1)?;
         }
         if prev_support_id + 2 < next_support_id {
             current_frame.load_from_image(&args.files[prev_support_id + 1])?;
             coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
-            progress += 1;
+            progress.update(1)?;
         }
         prev_support_id = next_support_id;
         prev_support = next_support.clone();
