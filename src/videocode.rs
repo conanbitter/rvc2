@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[repr(u8)]
-enum FrameType {
+pub enum FrameType {
     IFrame,
     PFrame,
     BFrame,
@@ -217,7 +217,7 @@ impl Encoder {
         writer.flush()?;
 
         let dct_size = self.buffer_dct.len() as u32;
-        let frame_size = 1 + dct_size; // frame_type+dct
+        let frame_size = 1 + dct_size + 4; // frame_type+dct+dct_size
 
         file.write_all(&frame_size.to_ne_bytes())?;
         self.data[0] = FrameType::IFrame as u8;
@@ -268,10 +268,10 @@ impl Encoder {
 
         let dct_size = self.buffer_dct.len() as u32;
         let motion_size = self.buffer_mprev.len() as u32;
-        let frame_size = 1 + motion_size + dct_size; // frame_type+mprev+dct
+        let frame_size = 1 + motion_size + 4 + dct_size + 4; // frame_type+mprev+mprev_size+dct+dct_size
 
         file.write_all(&frame_size.to_ne_bytes())?;
-        self.data[0] = FrameType::BFrame as u8;
+        self.data[0] = FrameType::PFrame as u8;
         file.write_all(&self.data)?;
         file.write_all(&motion_size.to_ne_bytes())?;
         file.write_all(&self.buffer_mprev)?;
@@ -349,10 +349,10 @@ impl Encoder {
         let dct_size = self.buffer_dct.len() as u32;
         let mprev_size = self.buffer_mprev.len() as u32;
         let mnext_size = self.buffer_mnext.len() as u32;
-        let frame_size = 1 + mprev_size + mnext_size + dct_size; // frame_type+mprev+mnext+dct
+        let frame_size = 1 + mprev_size + 4 + mnext_size + 4 + dct_size + 4; // frame_type+mprev+mprev_size+mnext+mnext_size+dct+dct_size
 
         file.write_all(&frame_size.to_ne_bytes())?;
-        self.data[0] = FrameType::PFrame as u8;
+        self.data[0] = FrameType::BFrame as u8;
         file.write_all(&self.data)?;
         file.write_all(&mprev_size.to_ne_bytes())?;
         file.write_all(&self.buffer_mprev)?;

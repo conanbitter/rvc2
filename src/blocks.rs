@@ -1,6 +1,11 @@
-use std::{f64::consts::PI, fmt, io::Write};
+use std::{
+    f64::consts::PI,
+    fmt,
+    io::{Read, Write},
+};
 
 use anyhow::Result;
+use byteorder::{ReadBytesExt, LE};
 use once_cell::sync::Lazy;
 
 use crate::bitio::{BitReader, BitWriter};
@@ -1580,6 +1585,20 @@ impl QMatrices {
             *dest = 2.0 * (src - 1.0) * quality_k + 1.0;
         }
         return result;
+    }
+
+    pub fn from_file(file: &mut dyn Read) -> Result<QMatrices> {
+        let mut result = QMatrices {
+            luma: [0.0; 8 * 8],
+            chroma: [0.0; 8 * 8],
+        };
+        for item in result.luma.iter_mut() {
+            *item = file.read_f64::<LE>()?;
+        }
+        for item in result.chroma.iter_mut() {
+            *item = file.read_f64::<LE>()?;
+        }
+        return Ok(result);
     }
 
     pub fn write(&self, file: &mut dyn Write) -> Result<()> {

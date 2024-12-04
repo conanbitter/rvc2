@@ -3,7 +3,7 @@ use std::{
     cmp::{max, min},
     f64::consts::PI,
     fs::File,
-    io::Write,
+    io::{Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     time::Instant,
 };
@@ -18,6 +18,7 @@ mod videocode;
 use anyhow::Result;
 use bitio::{BitReader, BitWriter};
 use blocks::{Block, QMatrices};
+use byteorder::{ReadBytesExt, LE};
 use clap::Parser;
 use humansize::{format_size, BINARY};
 use image::{GrayImage, ImageBuffer, ImageReader, Luma, Rgb, RgbImage};
@@ -28,7 +29,7 @@ use ndarray::{s, Array, Array2, ShapeBuilder};
 use ndarray_stats::QuantileExt;
 use once_cell::sync::Lazy;
 use planes::Plane;
-use videocode::{Encoder, MacroBlock, VideoFrame};
+use videocode::{Encoder, FrameType, MacroBlock, VideoFrame};
 
 /*
 fn calc_dct(src: &[f64], dst: &mut [f64]) {
@@ -143,15 +144,14 @@ struct Args {
 const MAGIC: [u8; 5] = [b'N', b'R', b'V', b'C', 1];
 const MAX_P_FRAMES: usize = 10;
 
-fn main() -> Result<()> {
-    let args = Args::parse_from(wild::args());
+fn encode(args: &Args) -> Result<()> {
     let quality = args.quality.clamp(0.0, 1.0);
     let qmatrices = QMatrices::new(quality);
 
     //println!("{:?}", args);
     let (image_width, image_height) = ImageReader::open(&args.files[0])?.into_dimensions()?;
 
-    let mut file = File::create(args.output)?;
+    let mut file = File::create(&args.output)?;
     // header
     file.write_all(&MAGIC)?;
     let header_imwidth = image_width as u16;
@@ -176,7 +176,7 @@ fn main() -> Result<()> {
 
     if args.nomotion {
         let mut frame = VideoFrame::new(image_width, image_height);
-        for filename in args.files {
+        for filename in &args.files {
             frame.load_from_image(filename)?;
             coder.encode_i_frame(&frame, &mut file, &qmatrices)?;
             progress.update(1)?;
@@ -222,6 +222,86 @@ fn main() -> Result<()> {
             prev_support = next_support.clone();
         }
     }
+    return Ok(());
+}
+
+fn main() -> Result<()> {
+    //let args = Args::parse_from(wild::args());
+
+    //let mut buffer = [0u8; std::mem::size_of::<VideoHeader>()];
+    let mut file = File::open("data/result.nrv")?;
+
+    //header
+    let mut magic = [0u8; 4];
+    file.read_exact(&mut magic)?;
+    let version = file.read_u8()?;
+    let frame_width = file.read_u16::<LE>()? as u32;
+    let frame_height = file.read_u16::<LE>()? as u32;
+    let mv_width = frame_width / 16;
+    let mv_height = frame_height / 16;
+    let fps = file.read_f32::<LE>()?;
+    let frame_count = file.read_u32::<LE>()?;
+
+    println!(
+        "{:?}({}) {}x{}  {} fps  {} frames",
+        magic, version, frame_width, frame_height, fps, frame_count
+    );
+
+    //metadata
+    let metadata_size = file.read_u32::<LE>()?;
+    file.seek(SeekFrom::Current(metadata_size as i64))?;
+
+    //qmatrices
+    let i_matrices = QMatrices::from_file(&mut file)?;
+    let pb_matrices = QMatrices::from_file(&mut file)?;
+
+    // frames
+    let data_size = file.read_u32::<LE>()?;
+    let next = file.stream_position()? + data_size as u64 + 4;
+    let frame_type = file.read_u8()?;
+    let dct_size = file.read_u32::<LE>()?;
+    println!("{} {} {}", frame_type, data_size, next);
+    let mut reader = BitReader::new(&mut file);
+    let mut frame = VideoFrame::new(frame_width, frame_height);
+    let mut mblock = MacroBlock::new();
+
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            mblock.read(&mut reader)?;
+            mblock.decode(&i_matrices);
+            frame.apply_macroblock(mx * 16, my * 16, &mblock);
+        }
+    }
+    println!("{}", file.stream_position()?);
+
+    frame.save_to_image("data/vdres.png")?;
+
+    //file.seek(SeekFrom::Start(next))?;
+    let data_size = file.read_u32::<LE>()?;
+    let next = file.stream_position()? + data_size as u64 + 4;
+    let frame_type = file.read_u8()?;
+
+    let mtn_size = file.read_u32::<LE>()?;
+    //let mut mprev = MotionMap::new(&frame);
+    //mprev.read(&mut file)?;
+    file.seek(SeekFrom::Current(mtn_size as i64))?;
+
+    let dct_size = file.read_u32::<LE>()?;
+    println!("{} {} {} {}", frame_type, data_size, mtn_size, dct_size);
+    let mut reader = BitReader::new(&mut file);
+    let mut frame = VideoFrame::new(frame_width, frame_height);
+    let mut mblock = MacroBlock::new();
+
+    for my in 0..mv_height {
+        for mx in 0..mv_width {
+            mblock.read(&mut reader)?;
+            mblock.decode(&i_matrices);
+            frame.apply_macroblock(mx * 16, my * 16, &mblock);
+        }
+    }
+
+    frame.save_to_image("data/vdres2.png")?;
+
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
         -66.0, -69.0, -60.0, -15.0, 16.0, -24.0, -62.0, -55.0, -65.0, -70.0, -57.0, -6.0, 26.0, -22.0, -58.0, -59.0,
