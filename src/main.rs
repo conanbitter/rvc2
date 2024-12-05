@@ -200,6 +200,7 @@ fn encode(args: &Args) -> Result<()> {
             next_support.load_from_image(&args.files[next_support_id])?;
             if p_count < MAX_P_FRAMES {
                 coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
+                //return Ok(());
                 p_count += 1;
             } else {
                 coder.encode_i_frame(&next_support, &mut file, &qmatrices)?;
@@ -225,9 +226,7 @@ fn encode(args: &Args) -> Result<()> {
     return Ok(());
 }
 
-fn main() -> Result<()> {
-    //let args = Args::parse_from(wild::args());
-
+fn decode() -> Result<()> {
     //let mut buffer = [0u8; std::mem::size_of::<VideoHeader>()];
     let mut file = File::open("data/result.nrv")?;
 
@@ -257,7 +256,7 @@ fn main() -> Result<()> {
 
     // frames
     let data_size = file.read_u32::<LE>()?;
-    let next = file.stream_position()? + data_size as u64 + 4;
+    let next = file.stream_position()? + data_size as u64;
     let frame_type = file.read_u8()?;
     let dct_size = file.read_u32::<LE>()?;
     println!("{} {} {}", frame_type, data_size, next);
@@ -278,13 +277,13 @@ fn main() -> Result<()> {
 
     //file.seek(SeekFrom::Start(next))?;
     let data_size = file.read_u32::<LE>()?;
-    let next = file.stream_position()? + data_size as u64 + 4;
+    let next = file.stream_position()? + data_size as u64;
     let frame_type = file.read_u8()?;
 
     let mtn_size = file.read_u32::<LE>()?;
-    //let mut mprev = MotionMap::new(&frame);
-    //mprev.read(&mut file)?;
-    file.seek(SeekFrom::Current(mtn_size as i64))?;
+    let mut mprev = MotionMap::new(&frame);
+    mprev.read(&mut file)?;
+    //file.seek(SeekFrom::Current(mtn_size as i64))?;
 
     let dct_size = file.read_u32::<LE>()?;
     println!("{} {} {} {}", frame_type, data_size, mtn_size, dct_size);
@@ -301,6 +300,13 @@ fn main() -> Result<()> {
     }
 
     frame.save_to_image("data/vdres2.png")?;
+    return Ok(());
+}
+
+fn main() -> Result<()> {
+    //let args = Args::parse_from(wild::args());
+    //encode(&args)?;
+    decode()?;
 
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,

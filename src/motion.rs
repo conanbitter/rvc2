@@ -9,7 +9,7 @@ use crate::{
     videocode::{MacroBlock, VideoFrame},
 };
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BlockType {
     New,
     Motion(i32, i32),
@@ -162,22 +162,27 @@ impl MotionMap {
                 if repeats == 1 {
                     data[0] = last.into();
                     writer.write_all(&data)?;
+                    //println!("{:?}", last);
                 } else if repeats > 1 {
                     data[0] = BlockType::Repeat(repeats).into();
                     writer.write_all(&data)?;
+                    //println!("{:?}", BlockType::Repeat(repeats));
                 }
                 repeats = 0;
                 last = *vector;
                 data[0] = (*vector).into();
                 writer.write_all(&data)?;
+                //println!("{:?}", *vector);
             }
         }
         if repeats == 1 {
             data[0] = last.into();
             writer.write_all(&data)?;
+            //println!("{:?}", last);
         } else if repeats > 1 {
             data[0] = BlockType::Repeat(repeats).into();
             writer.write_all(&data)?;
+            //println!("{:?}", BlockType::Repeat(repeats));
         }
         return Ok(());
     }
@@ -186,17 +191,19 @@ impl MotionMap {
         let mut index = 0usize;
         let mut last = BlockType::Repeat(0);
         let mut data = [0u8; 1];
-        while index <= self.vectors.len() {
+        while index < self.vectors.len() {
             reader.read_exact(&mut data)?;
             let cur: BlockType = data[0].into();
             if let BlockType::Repeat(repeats) = cur {
-                for _ in [0..repeats] {
+                //println!("{} {:?}", index, cur);
+                for _ in 0..repeats {
                     self.vectors[index] = last;
                     index += 1;
                 }
             } else {
                 last = cur;
                 self.vectors[index] = cur;
+                //println!("{} {:?}", index, cur);
                 index += 1;
             }
         }
