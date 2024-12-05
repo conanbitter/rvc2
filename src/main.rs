@@ -215,19 +215,19 @@ fn encode(args: &Args) -> Result<()> {
                 progress.update(1)?;
             }
             if prev_support_id + 2 < next_support_id {
-                current_frame.load_from_image(&args.files[prev_support_id + 1])?;
+                current_frame.load_from_image(&args.files[prev_support_id + 2])?;
                 coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
                 progress.update(1)?;
             }
             prev_support_id = next_support_id;
-            prev_support = next_support.clone();
+            next_support.clone_into(&mut prev_support);
+            //prev_support = next_support.clone();
         }
     }
     return Ok(());
 }
 
 fn decode() -> Result<()> {
-    //let mut buffer = [0u8; std::mem::size_of::<VideoHeader>()];
     let mut file = File::open("data/result.nrv")?;
 
     //header
@@ -254,124 +254,123 @@ fn decode() -> Result<()> {
     let i_matrices = QMatrices::from_file(&mut file)?;
     let pb_matrices = QMatrices::from_file(&mut file)?;
 
-    // frames
-    let data_size = file.read_u32::<LE>()?;
-    let next = file.stream_position()? + data_size as u64;
-    let frame_type = file.read_u8()?;
-    let dct_size = file.read_u32::<LE>()?;
-    println!("{} {} {}", frame_type, data_size, next);
-    let mut reader = BitReader::new(&mut file);
+    // allocations
     let mut frame = VideoFrame::new(frame_width, frame_height);
+    let mut prev_frame = VideoFrame::new(frame_width, frame_height);
+    let mut next_frame = VideoFrame::new(frame_width, frame_height);
     let mut mblock = MacroBlock::new();
-
-    for my in 0..mv_height {
-        for mx in 0..mv_width {
-            mblock.read(&mut reader)?;
-            mblock.decode(&i_matrices);
-            frame.apply_macroblock(mx * 16, my * 16, &mblock);
-        }
-    }
-    println!("{}", file.stream_position()?);
-
-    frame.save_to_image("data/vdres.png")?;
-
-    let prev_frame = frame.clone();
     let mut prev_block = MacroBlock::new();
-
-    file.seek(SeekFrom::Start(next))?;
-    let data_size = file.read_u32::<LE>()?;
-    let next = file.stream_position()? + data_size as u64;
-    let frame_type = file.read_u8()?;
-
-    let mtn_size = file.read_u32::<LE>()?;
-    let mut mprev = MotionMap::new(&frame);
-    mprev.read(&mut file)?;
-    //file.seek(SeekFrom::Current(mtn_size as i64))?;
-
-    let dct_size = file.read_u32::<LE>()?;
-    println!("{} {} {} {}", frame_type, data_size, mtn_size, dct_size);
-    let mut reader = BitReader::new(&mut file);
-    let mut frame = VideoFrame::new(frame_width, frame_height);
-    let mut mblock = MacroBlock::new();
-
-    for my in 0..mv_height {
-        for mx in 0..mv_width {
-            mblock.read(&mut reader)?;
-            mblock.decode(&i_matrices);
-            let vector = mprev.vectors[(mx + my * mv_width) as usize];
-            if let BlockType::Motion(vx, vy) = vector {
-                let dst_x = (mx as i32 * 16 + vx) as u32;
-                let dst_y = (my as i32 * 16 + vy) as u32;
-                prev_frame.extract_macroblock(dst_x, dst_y, &mut prev_block);
-                mblock.add(&prev_block);
-            }
-
-            frame.apply_macroblock(mx * 16, my * 16, &mblock);
-        }
-    }
-
-    frame.save_to_image("data/vdres2.png")?;
-
-    let next_frame = frame.clone();
     let mut next_block = MacroBlock::new();
-
-    file.seek(SeekFrom::Start(next))?;
-    let data_size = file.read_u32::<LE>()?;
-    let next = file.stream_position()? + data_size as u64;
-    let frame_type = file.read_u8()?;
-
-    let mtn_size = file.read_u32::<LE>()?;
     let mut mprev = MotionMap::new(&frame);
-    mprev.read(&mut file)?;
-    let mtn_size = file.read_u32::<LE>()?;
     let mut mnext = MotionMap::new(&frame);
-    mnext.read(&mut file)?;
 
-    let dct_size = file.read_u32::<LE>()?;
-    println!("{} {} {} {}", frame_type, data_size, mtn_size, dct_size);
-    let mut reader = BitReader::new(&mut file);
-    let mut frame = VideoFrame::new(frame_width, frame_height);
-    let mut mblock = MacroBlock::new();
+    let mut first = true;
 
-    for my in 0..mv_height {
-        for mx in 0..mv_width {
-            mblock.read(&mut reader)?;
-            mblock.decode(&i_matrices);
-            let mindex = (mx + my * mv_width) as usize;
-            let vector_prev = mprev.vectors[mindex];
-            let vector_next = mnext.vectors[mindex];
-
-            if let BlockType::Motion(pvx, pvy) = vector_prev {
-                let dst_x = (mx as i32 * 16 + pvx) as u32;
-                let dst_y = (my as i32 * 16 + pvy) as u32;
-                prev_frame.extract_macroblock(dst_x, dst_y, &mut prev_block);
-
-                if let BlockType::Motion(nvx, nvy) = vector_next {
-                    let dst_x = (mx as i32 * 16 + nvx) as u32;
-                    let dst_y = (my as i32 * 16 + nvy) as u32;
-                    next_frame.extract_macroblock(dst_x, dst_y, &mut next_block);
-                    prev_block.average(&next_block);
+    for i in 0..frame_count {
+        println!("{}/{}", i + 1, frame_count);
+        let data_size = file.read_u32::<LE>()?;
+        let next = file.stream_position()? + data_size as u64;
+        let frame_type = file.read_u8()?;
+        match frame_type {
+            0 => {
+                let dct_size = file.read_u32::<LE>()?;
+                let mut reader = BitReader::new(&mut file);
+                for my in 0..mv_height {
+                    for mx in 0..mv_width {
+                        mblock.read(&mut reader)?;
+                        mblock.decode(&i_matrices);
+                        frame.apply_macroblock(mx * 16, my * 16, &mblock);
+                    }
                 }
-                mblock.add(&prev_block);
-            } else if let BlockType::Motion(nvx, nvy) = vector_next {
-                let dst_x = (mx as i32 * 16 + nvx) as u32;
-                let dst_y = (my as i32 * 16 + nvy) as u32;
-                next_frame.extract_macroblock(dst_x, dst_y, &mut next_block);
-                mblock.add(&next_block);
+                //if first {
+                //    frame.clone_into(&mut next_frame);
+                //    first = false;
+                //} else {
+                next_frame.clone_into(&mut prev_frame);
+                frame.clone_into(&mut next_frame);
+                //}
+                if first {
+                    frame.clone_into(&mut prev_frame);
+                    //first = false;
+                }
+                prev_frame.save_to_image(format!("data/vidres/{:04}.png", i))?;
             }
+            1 => {
+                next_frame.clone_into(&mut prev_frame);
+                let mtn_size = file.read_u32::<LE>()?;
+                mprev.read(&mut file)?;
+                let dct_size = file.read_u32::<LE>()?;
+                let mut reader = BitReader::new(&mut file);
+                for my in 0..mv_height {
+                    for mx in 0..mv_width {
+                        mblock.read(&mut reader)?;
+                        mblock.decode(&i_matrices);
+                        let vector = mprev.vectors[(mx + my * mv_width) as usize];
+                        if let BlockType::Motion(vx, vy) = vector {
+                            let dst_x = (mx as i32 * 16 + vx) as u32;
+                            let dst_y = (my as i32 * 16 + vy) as u32;
+                            prev_frame.extract_macroblock(dst_x, dst_y, &mut prev_block);
+                            mblock.add(&prev_block);
+                        }
+                        frame.apply_macroblock(mx * 16, my * 16, &mblock);
+                    }
+                }
+                frame.clone_into(&mut next_frame);
+                if first {
+                    first = false;
+                } else {
+                    prev_frame.save_to_image(format!("data/vidres/{:04}.png", i))?;
+                }
+            }
+            2 => {
+                let mtn_size = file.read_u32::<LE>()?;
+                mprev.read(&mut file)?;
+                let mtn_size = file.read_u32::<LE>()?;
+                mnext.read(&mut file)?;
+                let dct_size = file.read_u32::<LE>()?;
+                let mut reader = BitReader::new(&mut file);
+                for my in 0..mv_height {
+                    for mx in 0..mv_width {
+                        mblock.read(&mut reader)?;
+                        mblock.decode(&i_matrices);
+                        let mindex = (mx + my * mv_width) as usize;
+                        let vector_prev = mprev.vectors[mindex];
+                        let vector_next = mnext.vectors[mindex];
 
-            frame.apply_macroblock(mx * 16, my * 16, &mblock);
+                        if let BlockType::Motion(pvx, pvy) = vector_prev {
+                            let dst_x = (mx as i32 * 16 + pvx) as u32;
+                            let dst_y = (my as i32 * 16 + pvy) as u32;
+                            prev_frame.extract_macroblock(dst_x, dst_y, &mut prev_block);
+
+                            if let BlockType::Motion(nvx, nvy) = vector_next {
+                                let dst_x = (mx as i32 * 16 + nvx) as u32;
+                                let dst_y = (my as i32 * 16 + nvy) as u32;
+                                next_frame.extract_macroblock(dst_x, dst_y, &mut next_block);
+                                prev_block.average(&next_block);
+                            }
+                            mblock.add(&prev_block);
+                        } else if let BlockType::Motion(nvx, nvy) = vector_next {
+                            let dst_x = (mx as i32 * 16 + nvx) as u32;
+                            let dst_y = (my as i32 * 16 + nvy) as u32;
+                            next_frame.extract_macroblock(dst_x, dst_y, &mut next_block);
+                            mblock.add(&next_block);
+                        }
+
+                        frame.apply_macroblock(mx * 16, my * 16, &mblock);
+                    }
+                }
+                frame.save_to_image(format!("data/vidres/{:04}.png", i))?;
+            }
+            _ => {}
         }
+        file.seek(SeekFrom::Start(next))?;
     }
-
-    frame.save_to_image("data/vdres3.png")?;
-
     return Ok(());
 }
 
 fn main() -> Result<()> {
-    //let args = Args::parse_from(wild::args());
-    //encode(&args)?;
+    let args = Args::parse_from(wild::args());
+    encode(&args)?;
     decode()?;
 
     /*let mut test_block = Block([
