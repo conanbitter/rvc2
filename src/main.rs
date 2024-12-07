@@ -145,11 +145,23 @@ const MAGIC: [u8; 5] = [b'N', b'R', b'V', b'C', 1];
 const MAX_P_FRAMES: usize = 10;
 
 fn encode(args: &Args) -> Result<()> {
+    let mut frame_size_i = 0u64;
+    let mut frame_size_p = 0u64;
+    let mut frame_size_b = 0u64;
+    let mut max_frame_size_i = 0u64;
+    let mut max_frame_size_p = 0u64;
+    let mut max_frame_size_b = 0u64;
+    let mut frame_count_i = 0u32;
+    let mut frame_count_p = 0u32;
+    let mut frame_count_b = 0u32;
     let quality = args.quality.clamp(0.0, 1.0);
     let qmatrices = QMatrices::new(quality);
 
     //println!("{:?}", args);
     let (image_width, image_height) = ImageReader::open(&args.files[0])?.into_dimensions()?;
+
+    let raw_frame_size_rgb = (image_width * image_height * 3) as f64;
+    let raw_frame_size_yuv = (image_width * image_height * 2) as f64;
 
     let mut file = File::create(&args.output)?;
     // header
@@ -191,7 +203,6 @@ fn encode(args: &Args) -> Result<()> {
         progress.update(1)?;
         let mut next_support_id;
         let mut p_count = 0;
-
         loop {
             next_support_id = min(prev_support_id + 3, args.files.len() - 1);
             if prev_support_id == next_support_id {
@@ -199,11 +210,21 @@ fn encode(args: &Args) -> Result<()> {
             }
             next_support.load_from_image(&args.files[next_support_id])?;
             if p_count < MAX_P_FRAMES {
-                coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
+                let frame_size = coder.encode_p_frame(&next_support, &prev_support, &mut file, &qmatrices)?;
+                frame_size_p += frame_size;
+                frame_count_p += 1;
+                if max_frame_size_p < frame_size {
+                    max_frame_size_p = frame_size;
+                }
                 //return Ok(());
                 p_count += 1;
             } else {
-                coder.encode_i_frame(&next_support, &mut file, &qmatrices)?;
+                let frame_size = coder.encode_i_frame(&next_support, &mut file, &qmatrices)?;
+                frame_size_i += frame_size;
+                frame_count_i += 1;
+                if max_frame_size_i < frame_size {
+                    max_frame_size_i = frame_size;
+                }
                 p_count = 0;
             }
 
@@ -211,12 +232,24 @@ fn encode(args: &Args) -> Result<()> {
 
             if prev_support_id + 1 < next_support_id {
                 current_frame.load_from_image(&args.files[prev_support_id + 1])?;
-                coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+                let frame_size =
+                    coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+                frame_size_b += frame_size;
+                frame_count_b += 1;
+                if max_frame_size_b < frame_size {
+                    max_frame_size_b = frame_size;
+                }
                 progress.update(1)?;
             }
             if prev_support_id + 2 < next_support_id {
                 current_frame.load_from_image(&args.files[prev_support_id + 2])?;
-                coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+                let frame_size =
+                    coder.encode_b_frame(&current_frame, &prev_support, &next_support, &mut file, &qmatrices)?;
+                frame_size_b += frame_size;
+                frame_count_b += 1;
+                if max_frame_size_b < frame_size {
+                    max_frame_size_b = frame_size;
+                }
                 progress.update(1)?;
             }
             prev_support_id = next_support_id;
@@ -224,6 +257,33 @@ fn encode(args: &Args) -> Result<()> {
             //prev_support = next_support.clone();
         }
     }
+    frame_size_i /= frame_count_i as u64;
+    frame_size_p /= frame_count_p as u64;
+    frame_size_b /= frame_count_b as u64;
+    let perc_rgb_i = frame_size_i as f64 / raw_frame_size_rgb * 100.0;
+    let perc_rgb_p = frame_size_p as f64 / raw_frame_size_rgb * 100.0;
+    let perc_rgb_b = frame_size_b as f64 / raw_frame_size_rgb * 100.0;
+    let perc_yuv_i = frame_size_i as f64 / raw_frame_size_yuv * 100.0;
+    let perc_yuv_p = frame_size_p as f64 / raw_frame_size_yuv * 100.0;
+    let perc_yuv_b = frame_size_b as f64 / raw_frame_size_yuv * 100.0;
+    let perc_max_rgb_i = max_frame_size_i as f64 / raw_frame_size_rgb * 100.0;
+    let perc_max_rgb_p = max_frame_size_p as f64 / raw_frame_size_rgb * 100.0;
+    let perc_max_rgb_b = max_frame_size_b as f64 / raw_frame_size_rgb * 100.0;
+    let perc_max_yuv_i = max_frame_size_i as f64 / raw_frame_size_yuv * 100.0;
+    let perc_max_yuv_p = max_frame_size_p as f64 / raw_frame_size_yuv * 100.0;
+    let perc_max_yuv_b = max_frame_size_b as f64 / raw_frame_size_yuv * 100.0;
+    println!(
+        "I-frame avg {} ({:.1}% of RGB, {:.1}% of YUV)     max {} ({:.1}% of RGB, {:.1}% of YUV)",
+        frame_size_i, perc_rgb_i, perc_yuv_i, max_frame_size_i, perc_max_rgb_i, perc_max_yuv_i,
+    );
+    println!(
+        "P-frame avg {} ({:.1}% of RGB, {:.1}% of YUV)     max {} ({:.1}% of RGB, {:.1}% of YUV)",
+        frame_size_p, perc_rgb_p, perc_yuv_p, max_frame_size_p, perc_max_rgb_p, perc_max_yuv_p,
+    );
+    println!(
+        "B-frame avg {} ({:.1}% of RGB, {:.1}% of YUV)     max {} ({:.1}% of RGB, {:.1}% of YUV)",
+        frame_size_b, perc_rgb_b, perc_yuv_b, max_frame_size_b, perc_max_rgb_b, perc_max_yuv_b,
+    );
     return Ok(());
 }
 
@@ -236,8 +296,8 @@ fn decode() -> Result<()> {
     let version = file.read_u8()?;
     let frame_width = file.read_u16::<LE>()? as u32;
     let frame_height = file.read_u16::<LE>()? as u32;
-    let mv_width = frame_width / 16;
-    let mv_height = frame_height / 16;
+    let mv_width = (frame_width as f64 / 16.0).ceil() as u32;
+    let mv_height = (frame_height as f64 / 16.0).ceil() as u32;
     let fps = file.read_f32::<LE>()?;
     let frame_count = file.read_u32::<LE>()?;
 
@@ -266,13 +326,25 @@ fn decode() -> Result<()> {
 
     let mut first = true;
 
+    let mut frame_time_i = 0f64;
+    let mut frame_time_p = 0f64;
+    let mut frame_time_b = 0f64;
+    let mut max_frame_time_i = 0f64;
+    let mut max_frame_time_p = 0f64;
+    let mut max_frame_time_b = 0f64;
+    let mut frame_count_i = 0u32;
+    let mut frame_count_p = 0u32;
+    let mut frame_count_b = 0u32;
+
     for i in 0..frame_count {
-        println!("{}/{}", i + 1, frame_count);
+        print!("\r{}/{}", i + 1, frame_count);
         let data_size = file.read_u32::<LE>()?;
         let next = file.stream_position()? + data_size as u64;
         let frame_type = file.read_u8()?;
+
         match frame_type {
             0 => {
+                let start = Instant::now();
                 let dct_size = file.read_u32::<LE>()?;
                 let mut reader = BitReader::new(&mut file);
                 for my in 0..mv_height {
@@ -293,9 +365,16 @@ fn decode() -> Result<()> {
                     frame.clone_into(&mut prev_frame);
                     //first = false;
                 }
+                let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                frame_time_i += elapsed;
+                frame_count_i += 1;
+                if max_frame_time_i < elapsed {
+                    max_frame_time_i = elapsed;
+                }
                 prev_frame.save_to_image(format!("data/vidres/{:04}.png", i))?;
             }
             1 => {
+                let start = Instant::now();
                 next_frame.clone_into(&mut prev_frame);
                 let mtn_size = file.read_u32::<LE>()?;
                 mprev.read(&mut file)?;
@@ -316,6 +395,12 @@ fn decode() -> Result<()> {
                     }
                 }
                 frame.clone_into(&mut next_frame);
+                let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                frame_time_p += elapsed;
+                frame_count_p += 1;
+                if max_frame_time_p < elapsed {
+                    max_frame_time_p = elapsed;
+                }
                 if first {
                     first = false;
                 } else {
@@ -323,6 +408,7 @@ fn decode() -> Result<()> {
                 }
             }
             2 => {
+                let start = Instant::now();
                 let mtn_size = file.read_u32::<LE>()?;
                 mprev.read(&mut file)?;
                 let mtn_size = file.read_u32::<LE>()?;
@@ -359,19 +445,31 @@ fn decode() -> Result<()> {
                         frame.apply_macroblock(mx * 16, my * 16, &mblock);
                     }
                 }
+                let elapsed = start.elapsed().as_secs_f64() * 1000.0;
+                frame_time_b += elapsed;
+                frame_count_b += 1;
+                if max_frame_time_b < elapsed {
+                    max_frame_time_b = elapsed;
+                }
                 frame.save_to_image(format!("data/vidres/{:04}.png", i))?;
             }
             _ => {}
         }
         file.seek(SeekFrom::Start(next))?;
     }
+    frame_time_i /= frame_count_i as f64;
+    frame_time_p /= frame_count_p as f64;
+    frame_time_b /= frame_count_b as f64;
+    println!("\nI-frame avg {:.2} ms    max {:.2} ms", frame_time_i, max_frame_time_i);
+    println!("P-frame avg {:.2} ms    max {:.2} ms", frame_time_p, max_frame_time_p);
+    println!("B-frame avg {:.2} ms    max {:.2} ms", frame_time_b, max_frame_time_b);
     return Ok(());
 }
 
 fn main() -> Result<()> {
     let args = Args::parse_from(wild::args());
     encode(&args)?;
-    decode()?;
+    //decode()?;
 
     /*let mut test_block = Block([
         -76.0, -73.0, -67.0, -62.0, -58.0, -67.0, -64.0, -55.0, -65.0, -69.0, -73.0, -38.0, -19.0, -43.0, -59.0, -56.0,
