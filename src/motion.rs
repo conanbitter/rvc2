@@ -75,8 +75,8 @@ fn block_diff_ult(a: &VideoFrame, ax: u32, ay: u32, b: &VideoFrame, bx: u32, by:
 
 impl MotionMap {
     pub fn new(frame: &VideoFrame) -> MotionMap {
-        let width = frame.width / 16;
-        let height = frame.height / 16;
+        let width = (frame.width as f64 / 16.0).ceil() as u32;
+        let height = (frame.height as f64 / 16.0).ceil() as u32;
         return MotionMap {
             vectors: vec![BlockType::New; (width * height) as usize],
             width,

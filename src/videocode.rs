@@ -201,10 +201,10 @@ impl Encoder {
         };
     }
 
-    pub fn encode_i_frame(&mut self, frame: &VideoFrame, file: &mut dyn Write, qmatrices: &QMatrices) -> Result<()> {
+    pub fn encode_i_frame(&mut self, frame: &VideoFrame, file: &mut dyn Write, qmatrices: &QMatrices) -> Result<u64> {
         let mut writer = BitWriter::new(&mut self.buffer_dct);
-        let mv_width = frame.width / 16;
-        let mv_height = frame.height / 16;
+        let mv_width = (frame.width as f64 / 16.0).ceil() as u32;
+        let mv_height = (frame.height as f64 / 16.0).ceil() as u32;
         let mut mblock = MacroBlock::new();
 
         for my in 0..mv_height {
@@ -227,7 +227,7 @@ impl Encoder {
         file.write_all(&self.buffer_dct)?;
 
         self.buffer_dct.clear();
-        return Ok(());
+        return Ok(frame_size as u64);
     }
 
     pub fn encode_p_frame(
@@ -236,14 +236,14 @@ impl Encoder {
         prev_frame: &VideoFrame,
         file: &mut dyn Write,
         qmatrices: &QMatrices,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let mut motion = MotionMap::new(&frame);
         motion.calculate(&frame, &prev_frame);
         motion.write(&mut self.buffer_mprev)?;
 
         let mut writer = BitWriter::new(&mut self.buffer_dct);
-        let mv_width = frame.width / 16;
-        let mv_height = frame.height / 16;
+        let mv_width = (frame.width as f64 / 16.0).ceil() as u32;
+        let mv_height = (frame.height as f64 / 16.0).ceil() as u32;
         let mut mblock1 = MacroBlock::new();
         let mut mblock2 = MacroBlock::new();
 
@@ -280,7 +280,7 @@ impl Encoder {
 
         self.buffer_dct.clear();
         self.buffer_mprev.clear();
-        return Ok(());
+        return Ok(frame_size as u64);
     }
 
     pub fn encode_b_frame(
@@ -290,18 +290,18 @@ impl Encoder {
         next_frame: &VideoFrame,
         file: &mut dyn Write,
         qmatrices: &QMatrices,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let mut motion_prev = MotionMap::new(&frame);
         motion_prev.calculate(&frame, &prev_frame);
         motion_prev.write(&mut self.buffer_mprev)?;
 
         let mut motion_next = MotionMap::new(&frame);
         motion_next.calculate(&frame, &next_frame);
-        motion_prev.write(&mut self.buffer_mnext)?;
+        motion_next.write(&mut self.buffer_mnext)?;
 
         let mut writer = BitWriter::new(&mut self.buffer_dct);
-        let mv_width = frame.width / 16;
-        let mv_height = frame.height / 16;
+        let mv_width = (frame.width as f64 / 16.0).ceil() as u32;
+        let mv_height = (frame.height as f64 / 16.0).ceil() as u32;
         let mut mblock1 = MacroBlock::new();
         let mut mblock2 = MacroBlock::new();
         let mut mblock3 = MacroBlock::new();
@@ -321,7 +321,7 @@ impl Encoder {
                         &mut mblock2,
                     );
 
-                    if let BlockType::Motion(nvx, nvy) = motion_prev.vectors[mv_index] {
+                    if let BlockType::Motion(nvx, nvy) = motion_next.vectors[mv_index] {
                         next_frame.extract_macroblock(
                             (dst_x as i32 + nvx) as u32,
                             (dst_y as i32 + nvy) as u32,
@@ -331,7 +331,7 @@ impl Encoder {
                     }
 
                     mblock1.difference(&mblock2);
-                } else if let BlockType::Motion(nvx, nvy) = motion_prev.vectors[mv_index] {
+                } else if let BlockType::Motion(nvx, nvy) = motion_next.vectors[mv_index] {
                     next_frame.extract_macroblock(
                         (dst_x as i32 + nvx) as u32,
                         (dst_y as i32 + nvy) as u32,
@@ -364,6 +364,6 @@ impl Encoder {
         self.buffer_dct.clear();
         self.buffer_mprev.clear();
         self.buffer_mnext.clear();
-        return Ok(());
+        return Ok(frame_size as u64);
     }
 }
